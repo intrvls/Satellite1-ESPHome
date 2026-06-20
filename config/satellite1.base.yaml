@@ -12,7 +12,7 @@ substitutions:
   project_name: Satellite1
   component_name: Core
 
-  esp32_fw_version: dev
+  esp32_fw_version: v0.2.0-intrvls
   xmos_fw_version: "v1.0.3"
 
 globals:
