@@ -38,7 +38,9 @@ speaker:
     channel: stereo
     timeout: never
     audio_dac: dac_proxy
-    # buffer_duration: 100ms
+    # Shared output ring buffer. Default is 500ms; kept small so a button/wake
+    # stop drains quickly instead of playing ~half a second of buffered audio.
+    buffer_duration: 200ms
 
   # Virtual speakers to combine the announcement and media streams together into one output
   - platform: mixer
@@ -48,6 +50,8 @@ speaker:
     source_speakers:
       - id: announcement_mixing_input
         timeout: never
+        # Chimes/TTS are short and embedded, so a small buffer drains fast on stop.
+        buffer_duration: 50ms
       - id: media_mixing_input
         timeout: never
         buffer_duration: 100ms
@@ -58,6 +62,7 @@ speaker:
     output_speaker: announcement_mixing_input
     sample_rate: 48000
     bits_per_sample: 16
+    buffer_duration: 50ms
   - platform: resampler
     id: media_resampling_speaker
     output_speaker: media_mixing_input
