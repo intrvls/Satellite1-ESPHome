@@ -79,7 +79,7 @@ binary_sensor:
           then:
             - script.execute:
                 id: play_sound
-                priority: false
+                priority: true
                 sound_file: "mute_switch_off_sound"
             - switch.template.publish:
                 id: master_mute_switch
@@ -87,7 +87,7 @@ binary_sensor:
           else:
             - script.execute:
                 id: play_sound
-                priority: false
+                priority: true
                 sound_file: "mute_switch_on_sound"
             - switch.template.publish:
                 id: master_mute_switch
@@ -148,26 +148,22 @@ binary_sensor:
                                     announcement: true
                                     id: external_media_player
                                 else:
+                                  # Do not pause music on a single press: just start a
+                                  # listening session. voice_assistant on_start ducks the
+                                  # media stream, so the music keeps playing underneath.
                                   - if:
                                       condition:
-                                        media_player.is_playing:
-                                          id: external_media_player
+                                        and:
+                                          - switch.is_off: master_mute_switch
+                                          - not: voice_assistant.is_running
                                       then:
-                                        - media_player.pause:
-                                            id: external_media_player
-                                      else:
-                                        - if:
-                                            condition:
-                                              and:
-                                                - switch.is_off: master_mute_switch
-                                                - not: voice_assistant.is_running
-                                            then:
-                                              - script.execute:
-                                                  id: play_sound
-                                                  priority: true
-                                                  sound_file: "center_button_press_sound"
-                                              - delay: 300ms
-                                              - voice_assistant.start:
+                                        # Same listen-start chime as the wake word path.
+                                        - script.execute:
+                                            id: play_sound
+                                            priority: true
+                                            sound_file: "wake_word_triggered_sound"
+                                        - delay: 300ms
+                                        - voice_assistant.start:
       # Double Click
       #  . Exposed as an event entity. To be used in automations inside Home Assistant
       - timing:
