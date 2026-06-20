@@ -3,7 +3,7 @@ substitutions:
   project_name: Satellite1
 
   # set this version by GHA at build time
-  esp32_fw_version: dev
+  esp32_fw_version: v0.2.0-intrvls
 
 packages:
   # This is an inline package to prefix the on_client_connected with the wait_until action

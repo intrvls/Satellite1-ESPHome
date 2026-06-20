@@ -9,6 +9,7 @@ __pycache__
 .pio/
 .temp/
 .vscode/
+.idea/
 
 build/
 /components
