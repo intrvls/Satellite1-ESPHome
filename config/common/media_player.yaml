@@ -21,25 +21,25 @@ audio_file:
     file: ${jack_connected_sound_file}
   - id: jack_disconnected_sound
     file: ${jack_disconnected_sound_file}
-  # Local chimes embedded from assets/sounds (relative to the config/ build dir).
+  # Device chimes shipped in this repo's assets/sounds, downloaded at build time.
   - id: mute_switch_on_sound
-    file: ../assets/sounds/mute.flac
+    file: https://raw.githubusercontent.com/intrvls/Satellite1-ESPHome/v0.2.0-intrvls/assets/sounds/mute.flac
   - id: mute_switch_off_sound
-    file: ../assets/sounds/unmute.flac
+    file: https://raw.githubusercontent.com/intrvls/Satellite1-ESPHome/v0.2.0-intrvls/assets/sounds/unmute.flac
   - id: timer_finished_sound
     file: ${timer_finished_sound_file}
   # Played when the voice assistant starts listening (wake word detected).
   - id: wake_word_triggered_sound
-    file: ../assets/sounds/listen_start.flac
+    file: https://raw.githubusercontent.com/intrvls/Satellite1-ESPHome/v0.2.0-intrvls/assets/sounds/listen_start.flac
   # Played when the voice assistant stops listening (user finished speaking).
   - id: listen_stop_sound
-    file: ../assets/sounds/listen_stop.flac
+    file: https://raw.githubusercontent.com/intrvls/Satellite1-ESPHome/v0.2.0-intrvls/assets/sounds/listen_stop.flac
   # Played while the voice assistant is processing the command.
   - id: thinking_sound
-    file: ../assets/sounds/thinking.flac
+    file: https://raw.githubusercontent.com/intrvls/Satellite1-ESPHome/v0.2.0-intrvls/assets/sounds/thinking.flac
   # Played when the volume is changed via the hardware buttons.
   - id: volume_change_sound
-    file: ../assets/sounds/volume_change.flac
+    file: https://raw.githubusercontent.com/intrvls/Satellite1-ESPHome/v0.2.0-intrvls/assets/sounds/volume_change.flac
   - id: center_button_press_sound
     file: ${center_button_press_sound_file}
   - id: center_button_double_press_sound
