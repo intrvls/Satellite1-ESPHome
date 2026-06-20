@@ -40,9 +40,6 @@ micro_wake_word:
       id: hey_jarvis
     - model: https://fph-firmware-assets.s3.us-east-1.amazonaws.com/wake-word/okay_nabu.json
       id: okay_nabu
-    - model: https://fph-firmware-assets.s3.us-east-1.amazonaws.com/wake-word/stop.json
-      id: stop
-      internal: true
   vad:
   microphone:
     microphone: sat1_mics
@@ -144,6 +141,18 @@ voice_assistant:
   on_stt_vad_end:
     - lambda: id(voice_assistant_phase) = ${voice_assist_thinking_phase_id};
     - script.execute: control_leds
+    # Audible feedback: listening stopped, now processing the command.
+    # Gated on the same wake_sound switch as the wake chime.
+    - if:
+        condition:
+          switch.is_on: wake_sound
+        then:
+          - script.execute:
+              id: play_sound
+              priority: true
+              sound_file: "listen_stop_sound"
+          # Repeat the thinking chime until a response starts (see thinking_loop).
+          - script.execute: thinking_loop
   on_intent_progress:
     - if:
         condition:
@@ -151,9 +160,9 @@ voice_assistant:
           lambda: 'return !x.empty();'
         then:
           - lambda: id(voice_assistant_phase) = ${voice_assist_replying_phase_id};
+          # Response started: stop the repeating thinking chime immediately.
+          - script.stop: thinking_loop
           - script.execute: control_leds
-          # Start a script that would potentially enable the stop word if the response is longer than a second
-          - script.execute: activate_stop_word_once
   on_tts_start:
     - if:
         condition:
@@ -161,9 +170,9 @@ voice_assistant:
           lambda: 'return id(voice_assistant_phase) != ${voice_assist_replying_phase_id};'
         then:
           - lambda: id(voice_assistant_phase) = ${voice_assist_replying_phase_id};
+          # Response started: stop the repeating thinking chime immediately.
+          - script.stop: thinking_loop
           - script.execute: control_leds
-          # Start a script that would potentially enable the stop word if the response is longer than a second
-          - script.execute: activate_stop_word_once
   # When the voice assistant ends ...
   on_end:
     - wait_until:
@@ -174,14 +183,8 @@ voice_assistant:
         id: media_mixing_input
         decibel_reduction: 0   # 0 dB means no reduction
         duration: 1.0s
-    # Stop the script that would potentially enable the stop word if the response is longer than a second
-    - script.stop: activate_stop_word_if_tts_step_is_long
-    # Disable the stop word (If the tiemr is not ringing)
-    - if:
-        condition:
-          switch.is_off: timer_ringing
-        then:
-    # - lambda: id(stop).disable();
+    # Stop repeating the thinking chime, in case it is still running.
+    - script.stop: thinking_loop
     # If the end happened because of an error, let the error phase on for a second
     - if:
         condition:
@@ -204,34 +207,22 @@ voice_assistant:
     - script.execute: control_leds
 
 script:
-  # Script used activate the stop word if the TTS step is long.
-  # Why is this wrapped on a script?
-  #   Becasue we want to stop the sequence if the TTS step is faster than that.
-  #   This allows us to prevent having the deactivation of the stop word before its own activation.
-  - id: activate_stop_word_if_tts_step_is_long
+  # Plays the thinking chime 3s after listening stops, then repeats it every 2s
+  # for as long as the voice assistant stays in the thinking phase. The loop ends
+  # on its own once a response starts (replying phase), or on error/end.
+  - id: thinking_loop
+    mode: restart
     then:
-      - delay: 1s
-      # Enable stop wake word
-      # - lambda: id(stop).enable();
-
-  - id: activate_stop_word_once
-    then:
-      - delay: 1s
-      # Enable stop wake word
-      - if:
+      - delay: 4s
+      - while:
           condition:
-            switch.is_off: timer_ringing
+            lambda: 'return id(voice_assistant_phase) == ${voice_assist_thinking_phase_id};'
           then:
-            - micro_wake_word.enable_model: stop
-            - wait_until:
-                not:
-                  media_player.is_announcing:
-                    id: external_media_player
-            - if:
-                condition:
-                  switch.is_off: timer_ringing
-                then:
-                  - micro_wake_word.disable_model: stop
+            - script.execute:
+                id: play_sound
+                priority: false
+                sound_file: "thinking_sound"
+            - delay: 4s
 
 select:
   - platform: template
