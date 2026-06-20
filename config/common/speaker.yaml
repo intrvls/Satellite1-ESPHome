@@ -50,8 +50,6 @@ speaker:
     source_speakers:
       - id: announcement_mixing_input
         timeout: never
-        # Chimes/TTS are short and embedded, so a small buffer drains fast on stop.
-        buffer_duration: 50ms
       - id: media_mixing_input
         timeout: never
         buffer_duration: 100ms
