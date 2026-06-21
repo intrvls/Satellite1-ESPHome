@@ -4,6 +4,8 @@
 
 #include "esphome/core/automation.h"
 
+#include <string>
+
 namespace esphome {
 namespace led_ring_controller {
 
@@ -48,6 +50,13 @@ template<typename... Ts> class EventAction : public Action<Ts...>, public Parent
 
  protected:
   LedEvent event_{LedEvent::WARNING};
+};
+
+// led_ring_controller.load_scenes — install a JSON scene set at runtime.
+template<typename... Ts> class LoadScenesAction : public Action<Ts...>, public Parented<LedRingController> {
+ public:
+  TEMPLATABLE_VALUE(std::string, scenes)
+  void play(Ts... x) override { this->parent_->load_scenes(this->scenes_.value(x...)); }
 };
 
 }  // namespace led_ring_controller

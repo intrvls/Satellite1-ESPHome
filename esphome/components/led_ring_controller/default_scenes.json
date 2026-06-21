@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "scenes": {
+    "idle":            { "transition_in_ms": 500, "brightness_mode": "user",
+      "layers": [ { "primitive": "solid", "params": { "color": "user" } } ] },
+
+    "waiting":         { "transition_in_ms": 300, "brightness_mode": "user",
+      "layers": [ { "primitive": "rotating_blob", "params": { "speed": 0.5, "trail_len": 2 } } ] },
+    "listening":       { "transition_in_ms": 200, "brightness_mode": "user",
+      "layers": [ { "primitive": "rotating_blob", "params": { "speed": 1.0, "trail_len": 2 } } ] },
+    "replying":        { "transition_in_ms": 200, "brightness_mode": "user",
+      "layers": [ { "primitive": "rotating_blob", "params": { "speed": -1.0, "trail_len": 2 } } ] },
+    "thinking":        { "transition_in_ms": 200, "brightness_mode": "user",
+      "layers": [ { "primitive": "pulse", "params": {
+        "color": "user", "min_b": 0.0, "max_b": 1.0, "period_ms": 200, "max_cycles": 0, "positions": [2, 14] } } ] },
+    "error":           { "transition_in_ms": 200, "brightness_mode": "fixed:0.8",
+      "layers": [ { "primitive": "pulse", "params": {
+        "color": "#FF0000", "min_b": 0.0, "max_b": 1.0, "period_ms": 200, "max_cycles": 0 } } ] },
+
+    "not_ready":       { "transition_in_ms": 200, "brightness_mode": "fixed:0.66",
+      "layers": [ { "primitive": "twinkle", "params": { "probability": 0.5, "color": "#FF0000" } } ] },
+    "no_ha":           { "transition_in_ms": 300, "brightness_mode": "fixed:0.66",
+      "layers": [ { "primitive": "twinkle", "params": { "probability": 0.5, "color": "#FF0000" } } ] },
+    "improv":          { "transition_in_ms": 0, "brightness_mode": "fixed:0.66",
+      "layers": [ { "primitive": "twinkle", "params": { "probability": 0.5, "color": "#FFE3B5" } } ] },
+    "init":            { "transition_in_ms": 0, "brightness_mode": "fixed:0.66",
+      "layers": [ { "primitive": "twinkle", "params": { "probability": 0.5, "color": "#18BBF2" } } ] },
+    "init_no_network": { "transition_in_ms": 0, "brightness_mode": "fixed:0.33",
+      "layers": [ { "primitive": "solid", "params": { "color": "#FFE3B5" } } ] },
+
+    "volume":          { "transition_in_ms": 0, "brightness_mode": "boosted",
+      "layers": [ { "primitive": "progress_arc", "params": { "source": "volume", "zero_indicator": "#FF0000" } } ] },
+    "action_button":   { "transition_in_ms": 0, "brightness_mode": "boosted",
+      "layers": [ { "primitive": "solid", "params": { "color": "user", "respect_light_on": false } } ] },
+
+    "jack_plugged":    { "transition_in_ms": 0, "brightness_mode": "boosted",
+      "layers": [ { "primitive": "ripple", "params": { "outward": true } } ] },
+    "jack_unplugged":  { "transition_in_ms": 0, "brightness_mode": "boosted",
+      "layers": [ { "primitive": "ripple", "params": { "outward": false } } ] },
+
+    "warning":         { "transition_in_ms": 100, "brightness_mode": "fixed:0.8",
+      "layers": [ { "primitive": "pulse", "params": {
+        "color": "#FF0000", "min_b": 0.0, "max_b": 1.0, "period_ms": 200, "max_cycles": 5 } } ] },
+
+    "timer_ring":      { "transition_in_ms": 0, "brightness_mode": "boosted",
+      "layers": [
+        { "primitive": "pulse", "params": { "color": "user", "min_b": 0.0, "max_b": 1.0, "period_ms": 200, "max_cycles": 0 } },
+        { "primitive": "markers", "when": "master_mute", "params": { "positions": [3, 9], "run": 1, "guard": 1, "color": "#FF0000" } }
+      ] },
+    "timer_tick":      { "transition_in_ms": 0, "brightness_mode": "boosted",
+      "layers": [
+        { "primitive": "progress_arc", "params": { "source": "timer", "moving_tick": true, "tick_step_ms": 100 } },
+        { "primitive": "markers", "when": "master_mute", "params": { "positions": [3, 9], "run": 1, "guard": 1, "color": "#FF0000" } }
+      ] },
+
+    "muted":           { "transition_in_ms": 0, "brightness_mode": "boosted",
+      "layers": [
+        { "primitive": "solid", "params": { "color": "user", "respect_light_on": false } },
+        { "primitive": "markers", "when": "master_mute", "params": { "positions": [0, 6, 12, 18], "run": 1, "guard": 1, "color": "#FF0000" } },
+        { "primitive": "markers", "when": "media_muted", "params": { "positions": [2, 8, 14, 20], "run": 3, "guard": 1, "color": "#C80000" } }
+      ] },
+
+    "xmos_flash":      { "transition_in_ms": 0, "brightness_mode": "fixed:0.6",
+      "layers": [ { "primitive": "sweep", "params": { "fill_below": false, "color": "#0000FF", "step_interval_ms": 0 } } ] },
+    "xmos_success":    { "transition_in_ms": 0, "brightness_mode": "fixed:0.8",
+      "layers": [ { "primitive": "pulse", "params": {
+        "color": "#00FF00", "min_b": 0.0, "max_b": 1.0, "period_ms": 200, "max_cycles": 2 } } ] },
+    "xmos_error":      { "transition_in_ms": 0, "brightness_mode": "fixed:0.8",
+      "layers": [ { "primitive": "pulse", "params": {
+        "color": "#FF0000", "min_b": 0.0, "max_b": 1.0, "period_ms": 200, "max_cycles": 2 } } ] },
+    "success":         { "transition_in_ms": 0, "brightness_mode": "fixed:0.8",
+      "layers": [ { "primitive": "pulse", "params": {
+        "color": "#00FF00", "min_b": 0.0, "max_b": 1.0, "period_ms": 200, "max_cycles": 2 } } ] }
+  },
+  "priority": [
+    { "when": "xmos_flashing_state == 1", "scene": "xmos_flash" },
+    { "when": "xmos_flashing_state == 2", "scene": "xmos_success" },
+    { "when": "xmos_flashing_state == 3", "scene": "xmos_error" },
+    { "when": "improv_ble", "scene": "improv" },
+    { "when": "init_in_progress && network_ok", "scene": "init" },
+    { "when": "init_in_progress", "scene": "init_no_network" },
+    { "when": "!network_ok", "scene": "no_ha" },
+    { "when": "volume_buttons_touched", "scene": "volume" },
+    { "when": "btn_action", "scene": "action_button" },
+    { "when": "jack_plugged", "scene": "jack_plugged" },
+    { "when": "jack_unplugged", "scene": "jack_unplugged" },
+    { "when": "warning", "scene": "warning" },
+    { "when": "timer_ringing", "scene": "timer_ring" },
+    { "when": "phase == 2", "scene": "waiting" },
+    { "when": "phase == 3", "scene": "listening" },
+    { "when": "phase == 4", "scene": "thinking" },
+    { "when": "phase == 5", "scene": "replying" },
+    { "when": "phase == 11", "scene": "error" },
+    { "when": "phase == 10", "scene": "not_ready" },
+    { "when": "is_timer_active", "scene": "timer_tick" },
+    { "when": "master_mute", "scene": "muted" },
+    { "when": "media_muted", "scene": "muted" },
+    { "default": true, "scene": "idle" }
+  ]
+}
