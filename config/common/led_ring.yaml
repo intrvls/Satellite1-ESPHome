@@ -8,6 +8,14 @@ globals:
     type: float
     restore_value: no
     initial_value: '0.5'
+
+led_ring_controller:
+  id: led_controller
+  strip_id: hw_led_ring
+  user_light_id: led_ring
+  frame_interval: 20ms
+  enable_json_loader: true   # TEMP (test scaffold): boot-validates default_scenes.json + enables load_scenes
+
 light:
   # Hardware LED ring. Sole writer is led_ring_controller; marked internal so ESPHome
   # does not expose it as a HA entity or allow other components to schedule shows.

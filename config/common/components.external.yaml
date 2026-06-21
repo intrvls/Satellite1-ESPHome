@@ -1,6 +1,6 @@
 substitutions:
-  ext_comp_repo_url: https://github.com/FutureProofHomes/Satellite1-ESPHome
-  ext_comp_repo_ref: staging
+  ext_comp_repo_url: https://github.com/intrvls/Satellite1-ESPHome
+  ext_comp_repo_ref: v0.2.0-intrvls.1
 
 external_components:
   - source:
@@ -11,6 +11,7 @@ external_components:
     components:
       - fusb302b
       - i2s_audio
+      - led_ring_controller
       - memory_flasher
       - pcm5122
       - satellite1

@@ -110,13 +110,6 @@ switch:
       - lambda: id(update_http_request).set_source_url("https://raw.githubusercontent.com/FutureProofHomes/Documentation/refs/heads/main/manifest.json");
       - component.update: update_http_request
 
-led_ring_controller:
-  id: led_controller
-  strip_id: hw_led_ring
-  user_light_id: led_ring
-  frame_interval: 20ms
-  enable_json_loader: true   # TEMP (test scaffold): boot-validates default_scenes.json + enables load_scenes
-
 external_components:
   - source:
       type: local
