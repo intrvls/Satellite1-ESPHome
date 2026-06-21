@@ -13,7 +13,7 @@ namespace led_ring_controller {
 template<typename... Ts> class SetPhaseAction : public Action<Ts...>, public Parented<LedRingController> {
  public:
   TEMPLATABLE_VALUE(int, phase)
-  void play(Ts... x) override { this->parent_->set_va_phase(this->phase_.value(x...)); }
+  void play(const Ts &...x) override { this->parent_->set_va_phase(this->phase_.value(x...)); }
 };
 
 // led_ring_controller.set_flag
@@ -21,7 +21,7 @@ template<typename... Ts> class SetFlagAction : public Action<Ts...>, public Pare
  public:
   TEMPLATABLE_VALUE(bool, value)
   void set_flag(LedFlag flag) { this->flag_ = flag; }
-  void play(Ts... x) override { this->parent_->set_flag(this->flag_, this->value_.value(x...)); }
+  void play(const Ts &...x) override { this->parent_->set_flag(this->flag_, this->value_.value(x...)); }
 
  protected:
   LedFlag flag_{LedFlag::WARNING};
@@ -31,14 +31,14 @@ template<typename... Ts> class SetFlagAction : public Action<Ts...>, public Pare
 template<typename... Ts> class SetMediaVolumeAction : public Action<Ts...>, public Parented<LedRingController> {
  public:
   TEMPLATABLE_VALUE(float, volume)
-  void play(Ts... x) override { this->parent_->set_media_volume(this->volume_.value(x...)); }
+  void play(const Ts &...x) override { this->parent_->set_media_volume(this->volume_.value(x...)); }
 };
 
 // led_ring_controller.set_timer_ratio
 template<typename... Ts> class SetTimerRatioAction : public Action<Ts...>, public Parented<LedRingController> {
  public:
   TEMPLATABLE_VALUE(float, ratio)
-  void play(Ts... x) override { this->parent_->set_timer_ratio(this->ratio_.value(x...)); }
+  void play(const Ts &...x) override { this->parent_->set_timer_ratio(this->ratio_.value(x...)); }
 };
 
 // led_ring_controller.event
@@ -46,7 +46,7 @@ template<typename... Ts> class EventAction : public Action<Ts...>, public Parent
  public:
   TEMPLATABLE_VALUE(float, value)  // used by XMOS_FLASH_PROGRESS only; 0 otherwise
   void set_event(LedEvent event) { this->event_ = event; }
-  void play(Ts... x) override { this->parent_->handle_event(this->event_, this->value_.value(x...)); }
+  void play(const Ts &...x) override { this->parent_->handle_event(this->event_, this->value_.value(x...)); }
 
  protected:
   LedEvent event_{LedEvent::WARNING};
@@ -56,7 +56,7 @@ template<typename... Ts> class EventAction : public Action<Ts...>, public Parent
 template<typename... Ts> class LoadScenesAction : public Action<Ts...>, public Parented<LedRingController> {
  public:
   TEMPLATABLE_VALUE(std::string, scenes)
-  void play(Ts... x) override { this->parent_->load_scenes(this->scenes_.value(x...)); }
+  void play(const Ts &...x) override { this->parent_->load_scenes(this->scenes_.value(x...)); }
 };
 
 }  // namespace led_ring_controller

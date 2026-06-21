@@ -3,7 +3,7 @@ substitutions:
   project_name: Satellite1
 
   # set this version by GHA at build time
-  esp32_fw_version: v0.2.0-intrvls
+  esp32_fw_version: v0.2.0-intrvls.1
 
 packages:
   # This is an inline package to prefix the on_client_connected with the wait_until action
@@ -109,12 +109,6 @@ switch:
       - logger.log: "OTA updates set to use Production firmware"
       - lambda: id(update_http_request).set_source_url("https://raw.githubusercontent.com/FutureProofHomes/Documentation/refs/heads/main/manifest.json");
       - component.update: update_http_request
-
-led_ring_controller:
-  id: led_controller
-  strip_id: hw_led_ring
-  user_light_id: led_ring
-  frame_interval: 20ms
 
 external_components:
   - source:

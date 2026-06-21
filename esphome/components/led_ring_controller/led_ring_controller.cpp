@@ -59,8 +59,13 @@ void LedRingController::loop() {
   uint32_t elapsed = now_ms - this->last_frame_ms_;
   if (elapsed < this->frame_interval_ms_)
     return;
-  if (elapsed > this->frame_interval_ms_ + this->frame_interval_ms_ / 2)
-    ESP_LOGW(TAG, "frame overrun: %ums elapsed (interval %ums)", elapsed, this->frame_interval_ms_);
+  // NOTE: `elapsed` is the gap between successive calls into this loop(), i.e. the cadence of
+  // ESPHome's cooperative main loop -- NOT how long our render takes (render is microseconds; the
+  // WS2812 transmit is deferred via schedule_show()). On a busy ESP32-S3 the main loop normally
+  // jitters to 30-35ms, so warning at 1.5x the interval just floods the log with noise we don't
+  // cause. Only flag genuine stutter (>=3x the target frame interval), and at VERBOSE.
+  if (elapsed > this->frame_interval_ms_ * 3)
+    ESP_LOGV(TAG, "frame interval %ums (target %ums)", elapsed, this->frame_interval_ms_);
   float dt = elapsed / 1000.0f;
 
   // 2. BUILD RenderCtx
