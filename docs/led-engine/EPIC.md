@@ -33,16 +33,23 @@ esphome/components/led_ring_controller/
   __init__.py                 # schema, codegen, actions
   led_ring_controller.h/.cpp  # Component: frame-rate loop(), sole strip writer, owns engine
   automation.h                # Action templates (set_phase, set_flag, set_media_volume, event)
-  engine/
-    frame.h                   # FrameBuffer: N float-RGB pixels; blend_over(), crossfade()
-    easing.h/.cpp             # linear / ease_in_out / sine; EasingFn = float(*)(float)
-    animation.h/.cpp          # Animation base + primitive subclasses
-    scene.h/.cpp              # SceneId enum, BrightnessMode enum, Layer, Scene structs
-    compositor.h/.cpp         # composite a scene's layers into a FrameBuffer (no Facts dep)
-    transition.h/.cpp         # TransitionManager: crossfade prev-final-frame -> new scene
-    state_machine.h/.cpp      # Facts struct + constexpr phase/xmos constants + resolve()
-    scene_library.h/.cpp      # build(Facts&): constructs all scenes; closures capture Facts
+  # --- engine module group (light-agnostic; see note below) ---
+  frame.h/.cpp                # FrameBuffer: N float-RGB pixels; blend_over(), crossfade()
+  easing.h/.cpp               # linear / ease_in_out / sine; EasingFn = float(*)(float)
+  animation.h/.cpp            # Animation base + primitive subclasses
+  scene.h/.cpp                # SceneId enum, BrightnessMode enum, Layer, Scene structs
+  compositor.h/.cpp           # composite a scene's layers into a FrameBuffer (no Facts dep)
+  transition.h/.cpp           # TransitionManager: crossfade prev-final-frame -> new scene
+  state_machine.h/.cpp        # Facts struct + constexpr phase/xmos constants + resolve()
+  scene_library.h/.cpp        # build(Facts&): constructs all scenes; closures capture Facts
 ```
+
+> **Note on the "engine" grouping.** These files were originally specced under an `engine/`
+> subdirectory, but ESPHome's component loader only copies source files from a component's
+> immediate directory into the build tree — it does **not** recurse into subdirectories. So all
+> engine files live flat in the component root. "engine/" wherever it appears in these docs
+> refers to this logical module group (the light-agnostic files), not a real directory; the
+> separation is enforced by discipline (no light-type includes in these files), not by path.
 
 ### Key architectural constraints
 

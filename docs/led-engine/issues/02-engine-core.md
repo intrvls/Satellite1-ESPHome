@@ -4,12 +4,17 @@
 
 ## Goal
 
-Add the light-agnostic engine foundation under `engine/`. Nothing in this directory may
-depend on ESPHome light types or `Facts` — it operates solely on `FrameBuffer` and `RenderCtx`.
+Add the light-agnostic engine foundation. Nothing in the engine module group may depend on
+ESPHome light types or `Facts` — it operates solely on `FrameBuffer` and `RenderCtx`.
+
+> The engine files live flat in the component root (`frame.h`, `easing.h`, …), not under an
+> `engine/` subdirectory — ESPHome's loader does not recurse into component subdirectories.
+> See the note in [EPIC.md](../EPIC.md#architecture). Light-agnosticism is enforced by
+> discipline (no light-type includes), not by directory.
 
 ## Scope
 
-### `engine/frame.h` — `FrameBuffer`
+### `frame.h` — `FrameBuffer`
 
 ```cpp
 struct Pixel { float r, g, b; };  // linear float, 0..1 per channel
@@ -30,20 +35,22 @@ class FrameBuffer {
   // Return a new buffer that is a linear blend: a*(1-t) + b*t
   static FrameBuffer crossfade(const FrameBuffer& a, const FrameBuffer& b, float t);
 
-  // Write to an ESPHome AddressableLight (GRB WS2812).
-  // Converts linear float to uint8: clamp(channel, 0, 1) * 255 + 0.5, cast to uint8_t.
-  // Writes raw Color — no additional gamma applied here.
-  void write_to_strip(light::AddressableLight& strip) const;
-
  private:
   std::vector<Pixel> pixels_;
 };
 ```
 
-`num_leds` is passed in from `LedRingController::setup()` via
-`strip_->get_addressable()->size()`, making `FrameBuffer` reusable for any strip length.
+`num_leds` is passed in from `LedRingController::setup()` via the strip's
+`AddressableLight::size()` (reached through `strip_->get_output()` cast to `AddressableLight*`),
+making `FrameBuffer` reusable for any strip length.
 
-### `engine/easing.h/.cpp` — easing functions
+> **`write_to_strip` is intentionally *not* on `FrameBuffer`.** Writing pixels to an
+> `AddressableLight` would pull an ESPHome light type into the engine, violating the
+> light-agnostic constraint above. The float-RGB → `AddressableLight` conversion (GRB WS2812,
+> `clamp(channel,0,1)*255+0.5`) lives in `LedRingController` instead — added in issue 06, the
+> only place that touches the strip.
+
+### `easing.h/.cpp` — easing functions
 
 ```cpp
 // Type alias for all easing functions. Function pointer (not std::function) —
@@ -55,7 +62,7 @@ float ease_in_out(float t);   // smoothstep: 3t² - 2t³
 float sine(float t);          // 0.5 - 0.5*cos(π*t)
 ```
 
-### `engine/animation.h/.cpp` — `Animation` base + `RenderCtx`
+### `animation.h/.cpp` — `Animation` base + `RenderCtx`
 
 ```cpp
 struct RenderCtx {
@@ -86,10 +93,10 @@ keeps the engine free of the full `Facts` type.
 
 ## Acceptance
 
-- Compiles with no ESPHome light type includes.
-- A throwaway `SolidFill` animation (all pixels = `base_color * base_brightness`) renders into
-  a `FrameBuffer` and `crossfade(a, b, 0.5f)` produces the expected midpoint values (verified
-  via a temporary `ESP_LOGD` in `setup()`, removed before merge).
+- Engine files (`frame`, `easing`, `animation`) compile with no ESPHome light type includes.
+- `crossfade(a, b, 0.5f)` produces the expected midpoint values and `blend_over(src, 0.5f)`
+  composites correctly (verified via a temporary `ESP_LOGD` in `LedRingController::setup()`,
+  removed before issue 06 merge).
 - `blend_over` with `alpha=1.0` fully replaces dst pixels with src.
-- `write_to_strip` produces `Color(255, 0, 0)` for a pixel `{r=1.0, g=0.0, b=0.0}` (GRB
-  swap handled by ESPHome's `ESPColorView`).
+- (Strip write-out — float-RGB → `Color`, GRB WS2812 — is verified in issue 06, where it
+  lives. It is deliberately absent from the engine here.)
