@@ -9,7 +9,14 @@ After this issue, the VA pipeline is fully animated with crossfades.
 
 ## Primitives
 
-All primitives live in `engine/animation.cpp`. Each has a POD `*Params` struct.
+All primitives live in `animation.h/.cpp` (flat in the component root — see
+[EPIC.md](../EPIC.md#architecture)). `RotatingBlob` and `Pulse` take POD `*Params` structs.
+
+> **Implementation notes.** `SolidFill` keeps its issue-06 constructor form (no `SolidFillParams`
+> struct): `SolidFill()` for IDLE (base colour, respects `light_on`) and `SolidFill(false)` for
+> always-lit fills. `FixedColorPulse` derives from `Pulse` and stores its colour as a member,
+> overriding a `pulse_color(ctx)` hook the base class calls each frame (rather than a colour
+> field inside `PulseParams`). Mic dimming and trail factors (0.75, 0.50) are ported verbatim.
 
 ### `SolidFill`
 
