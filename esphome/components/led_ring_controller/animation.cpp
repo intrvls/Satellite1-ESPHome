@@ -1,5 +1,7 @@
 #include "animation.h"
 
+#include "esphome/core/helpers.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -118,6 +120,143 @@ void Pulse::render(FrameBuffer &buffer, const RenderCtx &ctx) {
       if (idx < buffer.size())
         buffer[idx] = col;
     }
+  }
+}
+
+void ProgressArc::start(const RenderCtx &ctx) { this->start_ms_ = ctx.now_ms; }
+
+void ProgressArc::render(FrameBuffer &buffer, const RenderCtx &ctx) {
+  uint8_t n = buffer.size();
+  float ratio = this->params_.use_timer_ratio ? ctx.timer_ratio : ctx.media_volume;
+  if (ratio < 0.0f)
+    ratio = 0.0f;
+  if (ratio > 1.0f)
+    ratio = 1.0f;
+  float fill = ratio * static_cast<float>(n);
+
+  Pixel color = scale(ctx.base_color, ctx.base_brightness);
+  for (uint8_t i = 0; i < n; i++) {
+    if (static_cast<float>(i) <= fill) {
+      float frac = fill - static_cast<float>(i);
+      float b = frac < 1.0f ? frac : 1.0f;
+      buffer[i] = scale(color, b);
+    } else {
+      buffer[i] = {0.0f, 0.0f, 0.0f};
+    }
+  }
+
+  // Backwards-sweeping tick: dim one lit arc pixel to 0.9 as it travels CCW.
+  if (this->params_.moving_tick && n > 0) {
+    uint32_t step = this->params_.tick_step_ms == 0 ? 1 : this->params_.tick_step_ms;
+    uint32_t steps = (ctx.now_ms - this->start_ms_) / step;
+    uint8_t tick = static_cast<uint8_t>((n - 1) - (steps % n));  // CCW
+    uint8_t last_lit = fill >= 1.0f ? static_cast<uint8_t>(std::ceil(fill)) - 1 : 0;
+    if (static_cast<float>(tick) <= fill && tick != last_lit)
+      buffer[tick] = scale(buffer[tick], 0.9f);
+  }
+
+  if (ratio == 0.0f)
+    buffer[0] = this->params_.zero_indicator;
+}
+
+void Twinkle::start(const RenderCtx &ctx) {
+  this->last_progress_ms_ = ctx.now_ms;
+  std::fill(this->data_.begin(), this->data_.end(), 0);
+}
+
+void Twinkle::render(FrameBuffer &buffer, const RenderCtx &ctx) {
+  uint8_t n = buffer.size();
+  if (this->data_.size() != n)
+    this->data_.assign(n, 0);
+
+  constexpr uint32_t PROGRESS_INTERVAL = 4;  // ms per phase step (ESPHome default)
+  uint8_t pos_add = 0;
+  if (ctx.now_ms - this->last_progress_ms_ > PROGRESS_INTERVAL) {
+    uint32_t steps = (ctx.now_ms - this->last_progress_ms_) / PROGRESS_INTERVAL;
+    pos_add = steps > 255 ? 255 : static_cast<uint8_t>(steps);
+    this->last_progress_ms_ += steps * PROGRESS_INTERVAL;
+  }
+
+  for (uint8_t i = 0; i < n; i++) {
+    uint8_t d = this->data_[i];
+    if (d != 0) {
+      float level = std::sin(static_cast<float>(M_PI) * static_cast<float>(d) / 255.0f);
+      buffer[i] = scale(this->params_.color, level * ctx.base_brightness);
+      uint16_t np = static_cast<uint16_t>(d) + pos_add;
+      this->data_[i] = np > 255 ? 0 : static_cast<uint8_t>(np);
+    } else {
+      buffer[i] = {0.0f, 0.0f, 0.0f};
+    }
+  }
+
+  while (random_float() < this->params_.probability) {
+    uint8_t pos = static_cast<uint8_t>(random_uint32() % n);
+    if (this->data_[pos] == 0)
+      this->data_[pos] = 1;
+  }
+}
+
+void Ripple::start(const RenderCtx &ctx) {
+  this->start_ms_ = ctx.now_ms;
+  this->finished_ = false;
+}
+
+void Ripple::render(FrameBuffer &buffer, const RenderCtx &ctx) {
+  uint8_t n = buffer.size();
+  buffer.fill({0.0f, 0.0f, 0.0f});
+
+  constexpr uint32_t STEP_MS = 40;
+  uint32_t index = (ctx.now_ms - this->start_ms_) / STEP_MS;
+  if (index > 12) {
+    this->finished_ = true;
+    return;  // ring dark on the final frame
+  }
+
+  Pixel color = scale(ctx.base_color, ctx.base_brightness);
+  if (this->params_.outward) {
+    buffer[index % n] = color;
+    buffer[(n - index) % n] = color;
+  } else {
+    buffer[(12 - index + n) % n] = color;
+    buffer[(12 + index) % n] = color;
+  }
+}
+
+void Sweep::start(const RenderCtx &ctx) {
+  this->start_ms_ = ctx.now_ms;
+  this->finished_ = false;
+}
+
+void Sweep::render(FrameBuffer &buffer, const RenderCtx &ctx) {
+  uint8_t n = buffer.size();
+  int index;
+  if (this->params_.step_interval_ms == 0) {
+    index = static_cast<int>(ctx.xmos_flash_progress * static_cast<float>(n));
+  } else {
+    index = static_cast<int>((ctx.now_ms - this->start_ms_) / this->params_.step_interval_ms);
+    if (index > n - 1)
+      this->finished_ = true;
+  }
+
+  Pixel color = scale(this->params_.color, ctx.base_brightness);
+  for (uint8_t i = 0; i < n; i++) {
+    bool lit = this->params_.fill_below ? (i <= index) : (i > index);
+    buffer[i] = lit ? color : Pixel{0.0f, 0.0f, 0.0f};
+  }
+}
+
+void PositionMarkers::render(FrameBuffer &buffer, const RenderCtx & /*ctx*/) {
+  uint8_t n = buffer.size();
+  for (uint8_t p : this->params_.positions) {
+    // Blank the guard LEDs before the run.
+    for (uint8_t g = 1; g <= this->params_.guard; g++)
+      buffer[(p + n - g) % n] = {0.0f, 0.0f, 0.0f};
+    // Light the run.
+    for (uint8_t r = 0; r < this->params_.run; r++)
+      buffer[(p + r) % n] = this->params_.color;
+    // Blank the guard LEDs after the run.
+    for (uint8_t g = 0; g < this->params_.guard; g++)
+      buffer[(p + this->params_.run + g) % n] = {0.0f, 0.0f, 0.0f};
   }
 }
 

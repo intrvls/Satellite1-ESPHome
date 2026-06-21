@@ -71,6 +71,13 @@ struct Layer {
   BlendMode blend{BlendMode::OVER};
   float alpha{1.0f};
 
+  // When true, the animation renders directly into the composited output buffer instead of an
+  // isolated scratch buffer, so it can edit pixels already drawn by earlier layers (and leave
+  // the rest untouched). Used by overlay markers (PositionMarkers) that cut into the base — a
+  // scratch+blend pass would wipe the base with the marker layer's black pixels. blend/alpha
+  // are ignored for in-place layers.
+  bool in_place{false};
+
   // Nullary predicate — nullptr means always enabled. Constructed in
   // scene_library::build(Facts&) by closing over specific Facts fields, e.g.
   //   layer.enabled_pred = [&facts]{ return facts.master_mute; };
