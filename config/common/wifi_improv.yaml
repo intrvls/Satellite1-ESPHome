@@ -1,16 +1,16 @@
-globals:
-  - id: improv_ble_in_progress
-    type: bool
-    restore_value: no
-    initial_value: 'false'
-
 wifi:
   id: wifi_id
   on_connect:
-    - lambda: id(improv_ble_in_progress) = false;
-    - script.execute: control_leds
+    - led_ring_controller.set_flag:
+        flag: improv_ble
+        value: false
+    - led_ring_controller.set_flag:
+        flag: network_ok
+        value: !lambda return id(wifi_id).is_connected() && id(api_id).is_connected();
   on_disconnect:
-    - script.execute: control_leds
+    - led_ring_controller.set_flag:
+        flag: network_ok
+        value: false
 
 improv_serial:
 

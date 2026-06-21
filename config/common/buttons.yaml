@@ -1,10 +1,4 @@
 globals:
-  # Global variable tracking if the volume button was recently touched.
-  - id: volume_buttons_touched
-    type: bool
-    restore_value: no
-    initial_value: 'false'
-
   # Global variable tracking if the action button was recently touched.
   - id: action_button_touched
     type: bool
@@ -42,7 +36,9 @@ binary_sensor:
     icon: "mdi:volume-plus"
     on_press:
       then:
-        - lambda: id(volume_buttons_touched) = true;
+        - led_ring_controller.set_flag:
+            flag: volume_buttons_touched
+            value: true
         - script.execute:
             id: control_volume
             increase_volume: true
@@ -58,7 +54,9 @@ binary_sensor:
     icon: "mdi:volume-minus"
     on_press:
       then:
-        - lambda: id(volume_buttons_touched) = true;
+        - led_ring_controller.set_flag:
+            flag: volume_buttons_touched
+            value: true
         - script.execute:
             id: control_volume
             increase_volume: false
@@ -105,9 +103,13 @@ binary_sensor:
     name: "Button Right (Action)"
     icon: "mdi:gesture-tap"
     on_press:
-      - script.execute: control_leds
+      - led_ring_controller.set_flag:
+          flag: btn_action
+          value: true
     on_release:
-      - script.execute: control_leds
+      - led_ring_controller.set_flag:
+          flag: btn_action
+          value: false
     on_multi_click:
       # Simple Click:
       #   - Abort "things" in order
@@ -217,7 +219,6 @@ binary_sensor:
                     id: play_sound
                     priority: false
                     sound_file: "center_button_long_press_sound"
-                - light.turn_off: voice_assistant_leds
                 - event.trigger:
                     id: action_button_press_event
                     event_type: "long_press"
@@ -231,17 +232,12 @@ binary_sensor:
               condition:
                 lambda: return !id(action_button_touched);
               then:
-                - light.turn_on:
-                    brightness: 100%
-                    id: voice_assistant_leds
-                    effect: "Factory Reset Coming Up"
                 - script.execute:
                     id: play_sound
                     priority: true
                     sound_file: "factory_reset_initiated_sound"
                 - wait_until:
                     binary_sensor.is_off: btn_action
-                - light.turn_off: voice_assistant_leds
                 - script.execute:
                     id: play_sound
                     priority: true

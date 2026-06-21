@@ -31,8 +31,10 @@ switch:
           id: media_mixing_input
           decibel_reduction: 0
           duration: 1.0s
-      # Refresh the LED ring
-      - script.execute: control_leds
+      # Clear the ringing state on the LED engine
+      - led_ring_controller.set_flag:
+          flag: timer_ringing
+          value: false
     on_turn_on:
       # Duck audio
       - mixer_speaker.apply_ducking:
@@ -41,8 +43,10 @@ switch:
           duration: 0.0s
       # Ring timer
       - script.execute: ring_timer
-      # Refresh LED
-      - script.execute: control_leds
+      # Set the ringing state on the LED engine
+      - led_ring_controller.set_flag:
+          flag: timer_ringing
+          value: true
       # If 15 minutes have passed and the timer is still ringing, stop it.
       - delay: 15min
       - switch.turn_off: timer_ringing
@@ -94,6 +98,22 @@ script:
             }
           }
           id(first_active_timer) = output_timer;
+
+  # Recomputes the timer facts and pushes them to the LED engine. Called on every timer
+  # lifecycle trigger (started/cancelled/updated/tick) so the engine's countdown arc and
+  # is_timer_active resolution track the live timer state without an old dispatcher.
+  - id: refresh_timer_leds
+    then:
+      - lambda: |-
+          id(check_if_timers_active).execute();
+          if (id(is_timer_active)) { id(fetch_first_active_timer).execute(); }
+      - led_ring_controller.set_flag:
+          flag: is_timer_active
+          value: !lambda "return id(is_timer_active);"
+      - led_ring_controller.set_timer_ratio: !lambda |-
+          if (!id(is_timer_active)) return 0.0f;
+          return (float) id(first_active_timer).seconds_left /
+                 (float) std::max(id(first_active_timer).total_seconds, (uint32_t) 1);
 
   # Script used to check if a timer is active (Stored in global is_timer_active)
   - id: check_if_timers_active

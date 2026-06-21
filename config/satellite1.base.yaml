@@ -16,21 +16,13 @@ substitutions:
   xmos_fw_version: "v1.0.3"
 
 globals:
-  # Global initialisation variable. Initialized to true and set to false once everything is connected. Only used to have a smooth "plugging" experience
+  # Global initialisation variable. Initialized to true and set to false once everything is connected. Only used to have a smooth "plugging" experience.
+  # Beyond LEDs this also gates the XMOS auto-flash, the VA error phase and button actions,
+  # so it is kept as a device-state flag and mirrored into the LED engine via set_flag.
   - id: init_in_progress
     type: bool
     restore_value: no
     initial_value: 'true'
-  # Global variable storing if user action causes warning
-  - id: warning
-    type: bool
-    restore_value: no
-    initial_value: 'false'
-  # Global variable tracking the XMOS flasher status.
-  - id: xmos_flashing_state
-    type: int
-    restore_value: no
-    initial_value: '0'
   # Global variable tracking the XMOS flasher status.
   - id: pd_power_contract
     type: int
@@ -51,8 +43,6 @@ esphome:
     - priority: -100
       then:
         - logger.log: "${company_name} ${project_name} ${component_name} running ESP firmware: ${esp32_fw_version} and XMOS firmware: ${xmos_fw_version}"
-        # Run the script to refresh the LED status
-        - script.execute: control_leds
         - delay: 1s
 
         # if line_out was used previously but is not available try speaker
@@ -68,7 +58,9 @@ esphome:
               lambda: return id(init_in_progress);
             then:
               - lambda: id(init_in_progress) = false;
-              - script.execute: control_leds
+              - led_ring_controller.set_flag:
+                  flag: init_in_progress
+                  value: false
 
 ota:
   - platform: esphome
@@ -150,20 +142,18 @@ memory_flasher:
 
     on_flashing_start:
       then:
-        - lambda: id(xmos_flashing_state) = 1;
-        - script.execute: control_leds
+        - led_ring_controller.event: xmos_flash_start
 
     on_progress_update:
       then:
-        - lambda: id(global_led_animation_index) = id(xflash).flashing_progress * 24 / 100;
-        - script.execute: control_leds
+        - led_ring_controller.event:
+            event: xmos_flash_progress
+            value: !lambda return id(xflash).flashing_progress;
 
     on_flashing_success:
       then:
         - logger.log: "success called"
-        - lambda: id(xmos_flashing_state) = 2;
-        - script.execute: control_leds
-        - lambda: id(xmos_flashing_state) = 0;
+        - led_ring_controller.event: xmos_success
         - if:
             condition:
               lambda: |-
@@ -178,9 +168,7 @@ memory_flasher:
     on_flashing_failed:
       then:
         - logger.log: "failed called"
-        - lambda: id(xmos_flashing_state) = 3;
-        - script.execute: control_leds
-        - lambda: id(xmos_flashing_state) = 0;
+        - led_ring_controller.event: xmos_error
 
     on_erasing_done:
       then:

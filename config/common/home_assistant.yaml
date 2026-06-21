@@ -2,9 +2,16 @@ api:
   id: api_id
   on_client_connected:
     - lambda: id(init_in_progress) = false;
-    - script.execute: control_leds
+    - led_ring_controller.set_flag:
+        flag: init_in_progress
+        value: false
+    - led_ring_controller.set_flag:
+        flag: network_ok
+        value: !lambda return id(wifi_id).is_connected() && id(api_id).is_connected();
   on_client_disconnected:
-    - script.execute: control_leds
+    - led_ring_controller.set_flag:
+        flag: network_ok
+        value: false
   encryption:   # Uses key set by Home Assistant
 
 button:
@@ -54,12 +61,15 @@ switch:
                 id: master_mute_switch
                 state: OFF
           else:
-            - lambda: id(warning) = true;
-            - script.execute: control_leds
+            - led_ring_controller.event: warning
     on_turn_on:
-      - script.execute: control_leds
+      - led_ring_controller.set_flag:
+          flag: master_mute
+          value: true
     on_turn_off:
-      - script.execute: control_leds
+      - led_ring_controller.set_flag:
+          flag: master_mute
+          value: false
 
 text_sensor:
   - platform: template
