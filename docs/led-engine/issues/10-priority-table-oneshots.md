@@ -93,6 +93,21 @@ on all layers of the new scene. This resets `index_`, `cycle_count_`, `pos_`, et
 re-entering a one-shot scene (e.g., a second `warning` event while the first is in progress)
 restarts the animation from the beginning.
 
+## Status
+
+Verified against the implementation (issues 05–09):
+- `state_machine.cpp` `resolve()` returns 22 SceneIds — the full table above (21 conditions +
+  default `IDLE`). `SUCCESS` is intentionally absent (standalone, not resolve-reachable).
+- The six `one_shot=true` scenes (`WARNING`, `JACK_PLUGGED`, `JACK_UNPLUGGED`, `XMOS_SUCCESS`,
+  `XMOS_ERROR`, `SUCCESS`) each have an `on_finished` closure over `facts`; `ERROR` is not one.
+- The controller's step-6 one-shot check + `start()`-on-scene-change reset are in place
+  (issue 06).
+- Engine source contains no references to `control_leds`, `voice_assistant_leds`, or
+  `led_anim_speed`.
+
+The remaining acceptance items are on-device behavioural checks performed during/after the
+issue 11 cutover (the engine isn't the live LED path until then).
+
 ## Acceptance
 
 - Full device pass of every state path described in the EPIC verification section.

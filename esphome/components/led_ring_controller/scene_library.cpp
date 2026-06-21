@@ -10,7 +10,7 @@ namespace led_ring_controller {
 
 namespace {
 
-// Reference colours (linear float 0..1), mirroring the originals in led_ring.yaml / control_leds.
+// Reference colours (linear float 0..1), mirroring the originals from the legacy LED scripts.
 constexpr Pixel RED{1.0f, 0.0f, 0.0f};
 constexpr Pixel DARK_RED{0.784f, 0.0f, 0.0f};  // 200/255
 constexpr Pixel GREEN{0.0f, 1.0f, 0.0f};
