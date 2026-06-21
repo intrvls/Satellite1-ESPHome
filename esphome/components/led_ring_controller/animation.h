@@ -34,5 +34,35 @@ class Animation {
   virtual bool is_finished() const { return false; }
 };
 
+// Fills the whole ring with a single colour. This is the milestone stub used to build every
+// scene in issues 03-06; the rich primitives (Spin, Pulse, Ripple, Arc, ...) replace most uses
+// in issues 08-09.
+//
+// Three modes:
+//   SolidFill()                       — user base colour, respects light_on (off -> black). IDLE.
+//   SolidFill(false)                  — user base colour, ignores light_on (always lit).
+//   SolidFill(Pixel, duration_ms=0)   — fixed colour; if duration_ms != 0 it is a finite
+//                                        one-shot that reports is_finished() once elapsed.
+// All modes scale output by RenderCtx.base_brightness.
+class SolidFill : public Animation {
+ public:
+  SolidFill() = default;
+  explicit SolidFill(bool respect_light_on) : respect_light_on_(respect_light_on) {}
+  explicit SolidFill(Pixel fixed_color, uint32_t duration_ms = 0)
+      : use_fixed_(true), fixed_(fixed_color), duration_ms_(duration_ms) {}
+
+  void start(const RenderCtx &ctx) override;
+  void render(FrameBuffer &buffer, const RenderCtx &ctx) override;
+  bool is_finished() const override { return finished_; }
+
+ protected:
+  bool use_fixed_{false};
+  bool respect_light_on_{true};
+  Pixel fixed_{};
+  uint32_t duration_ms_{0};
+  uint32_t start_ms_{0};
+  bool finished_{false};
+};
+
 }  // namespace led_ring_controller
 }  // namespace esphome

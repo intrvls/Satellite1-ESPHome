@@ -130,6 +130,12 @@ class SceneLibrary {
 `build()` is called once from `LedRingController::setup()`. Closure references into `facts`
 are valid for the lifetime of the controller. `facts` must not be moved after `build()`.
 
+> **Implementation ordering.** `build(Facts&)` needs the `Facts` type from issue 05, so
+> `scene_library.h/.cpp` is added together with `state_machine` / the controller (issues 05-06)
+> rather than strictly within issue 03. Issue 03 delivers the type vocabulary (`scene.h`) and
+> the `Compositor`. Every scene in `build()` is wired with the `SolidFill` stub primitive (added
+> to `animation.h` in this batch); the rich primitives replace most uses in issues 08-09.
+
 ### `engine/compositor.h/.cpp`
 
 ```cpp
