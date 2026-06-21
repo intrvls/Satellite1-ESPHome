@@ -2,7 +2,6 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/light/light_state.h"
-#include "esphome/components/light/addressable_light.h"
 
 #include "compositor.h"
 #include "frame.h"
@@ -12,6 +11,11 @@
 #include "transition.h"
 
 #include <string>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/rmt_tx.h"
+#include "driver/rmt_encoder.h"
 
 #ifdef USE_LED_RING_JSON_LOADER
 #include "scene_factory.h"
@@ -51,12 +55,19 @@ enum class LedEvent {
 
 class LedRingController : public Component {
  public:
-  void set_strip(light::AddressableLightState *strip) { strip_ = strip; }
   void set_user_light(light::LightState *user_light) { user_light_ = user_light; }
   void set_frame_interval_ms(uint32_t ms) { frame_interval_ms_ = ms; }
+  void set_pin(uint8_t pin) { pin_ = pin; }
+  void set_num_leds(uint16_t num_leds) { num_leds_ = static_cast<uint8_t>(num_leds); }
+  void set_render_core(uint8_t core) { render_core_ = core; }
+  // order[k] = source channel index (0=R,1=G,2=B) emitted at output byte position k.
+  void set_rgb_order(uint8_t a, uint8_t b, uint8_t c) {
+    this->order_[0] = a;
+    this->order_[1] = b;
+    this->order_[2] = c;
+  }
 
   void setup() override;
-  void loop() override;
   void dump_config() override;
   float get_setup_priority() const override { return setup_priority::HARDWARE; }
 
@@ -80,21 +91,39 @@ class LedRingController : public Component {
   bool load_scenes(const std::string &json);
 
  protected:
-  // Converts the work buffer (linear float RGB) to the AddressableLight and schedules a show.
-  // Per-channel: uint8_t(clamp(v, 0, 1) * 255 + 0.5). GRB ordering + the strip's configured
-  // colour/gamma correction are handled by ESPHome's ESPColorView, matching the prior system.
-  void write_frame_(const FrameBuffer &frame);
+  // Allocates the RMT TX channel + WS2812 bytes encoder on pin_. Returns false on any IDF error.
+  bool init_rmt_();
+
+  // FreeRTOS entry point (pinned to render_core_) -> forwards to render_task_().
+  static void render_task_trampoline_(void *arg);
+  // The render loop: a fixed-cadence vTaskDelayUntil tick that renders + transmits one frame each
+  // iteration, fully independent of ESPHome's cooperative main loop.
+  void render_task_();
+  // Renders exactly one frame into work_ (scene resolve -> composite -> transition -> one-shot).
+  void render_one_frame_(uint32_t now_ms, float dt);
+
+  // Encodes work_ to GRB-ordered bytes and pushes them out the RMT channel, blocking this task
+  // (not the main loop) until the transmit completes.
+  void transmit_frame_(const FrameBuffer &frame);
 
   // Selects the active scene. Uses the JSON priority table if one has been installed; otherwise
   // the compiled StateMachine table.
   SceneId resolve_scene_();
 
-  light::AddressableLightState *strip_{nullptr};
   light::LightState *user_light_{nullptr};
   uint32_t frame_interval_ms_{20};
 
-  // Resolved once in setup() from strip_->get_output().
-  light::AddressableLight *strip_out_{nullptr};
+  uint8_t pin_{0};
+  uint8_t num_leds_{24};
+  uint8_t render_core_{1};
+  uint8_t order_[3]{1, 0, 2};  // default GRB
+
+  rmt_channel_handle_t channel_{nullptr};
+  rmt_encoder_handle_t encoder_{nullptr};
+  uint8_t *tx_buf_{nullptr};  // num_leds_ * 3 bytes, internal RAM (non-DMA)
+  size_t tx_buf_size_{0};
+
+  TaskHandle_t task_handle_{nullptr};
 
   Facts facts_;
   StateMachine sm_;
@@ -106,11 +135,19 @@ class LedRingController : public Component {
   FrameBuffer prev_{24};
 
   SceneId active_scene_{SceneId::IDLE};
-  uint32_t last_frame_ms_{0};
 
 #ifdef USE_LED_RING_JSON_LOADER
   const char *default_scenes_json_{nullptr};
   std::vector<PriorityRule> json_priority_;  // empty -> use the compiled StateMachine table
+
+  // Runtime scene-install handoff. load_scenes() parses on the caller's thread (main loop) and
+  // stashes the result here under install_mux_; the render task picks it up at the top of a frame
+  // and performs the actual library_.install(), so library_/json_priority_ are only ever mutated
+  // by the render task -- no lock on the render hot path.
+  portMUX_TYPE install_mux_ = portMUX_INITIALIZER_UNLOCKED;
+  bool install_pending_{false};
+  std::vector<Scene> pending_scenes_;
+  std::vector<PriorityRule> pending_priority_;
 #endif
 };
 
