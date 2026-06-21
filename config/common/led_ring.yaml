@@ -9,9 +9,11 @@ globals:
     restore_value: no
     initial_value: '0.5'
 light:
-  # Hardware LED ring. Not used because remapping needed
+  # Hardware LED ring. Sole writer is led_ring_controller; marked internal so ESPHome
+  # does not expose it as a HA entity or allow other components to schedule shows.
   - platform: esp32_rmt_led_strip
     id: hw_led_ring
+    internal: true
     pin: GPIO21
     num_leds: 24
     rgb_order: GRB

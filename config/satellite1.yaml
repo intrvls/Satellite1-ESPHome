@@ -93,6 +93,12 @@ switch:
       - lambda: id(update_http_request).set_source_url("https://raw.githubusercontent.com/FutureProofHomes/Documentation/refs/heads/main/manifest.json");
       - component.update: update_http_request
 
+led_ring_controller:
+  id: led_controller
+  strip_id: hw_led_ring
+  user_light_id: led_ring
+  frame_interval: 20ms
+
 external_components:
   - source:
       type: local
@@ -100,6 +106,7 @@ external_components:
     components:
       - fusb302b
       - i2s_audio
+      - led_ring_controller
       - memory_flasher
       - pcm5122
       - satellite1

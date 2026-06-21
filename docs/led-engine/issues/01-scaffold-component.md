@@ -74,8 +74,9 @@ LedRingController:
   Frame interval: 20 ms
 ```
 
-LED count is read from the strip's `AddressableLight` at setup time via
-`strip_->get_addressable()->size()`.
+LED count is read from the strip's `AddressableLight` at setup time. `LightState` exposes the
+output via `get_output()` (returns `LightOutput*`); cast it to `AddressableLight*` to reach
+`size()`: `static_cast<light::AddressableLight *>(strip_->get_output())->size()`.
 
 ## Test YAML
 
