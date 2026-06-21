@@ -6,8 +6,6 @@
 #include "esphome/core/log.h"
 
 #include <algorithm>
-#include <memory>
-#include <utility>
 
 namespace esphome {
 namespace led_ring_controller {
@@ -37,8 +35,6 @@ void LedRingController::setup() {
   this->library_.build(this->facts_);
   this->facts_.init_in_progress = true;  // seed correct boot state
   this->last_frame_ms_ = millis();
-
-  this->run_selftest_();  // temporary — remove before issue 07 merge
 }
 
 void LedRingController::loop() {
@@ -114,6 +110,73 @@ void LedRingController::loop() {
   this->last_frame_ms_ = now_ms;
 }
 
+void LedRingController::set_flag(LedFlag flag, bool value) {
+  switch (flag) {
+    case LedFlag::WARNING:
+      this->facts_.warning = value;
+      break;
+    case LedFlag::JACK_PLUGGED:
+      this->facts_.jack_plugged = value;
+      break;
+    case LedFlag::JACK_UNPLUGGED:
+      this->facts_.jack_unplugged = value;
+      break;
+    case LedFlag::VOLUME_BUTTONS_TOUCHED:
+      this->facts_.volume_buttons_touched = value;
+      break;
+    case LedFlag::BTN_ACTION:
+      this->facts_.btn_action = value;
+      break;
+    case LedFlag::INIT_IN_PROGRESS:
+      this->facts_.init_in_progress = value;
+      break;
+    case LedFlag::IMPROV_BLE:
+      this->facts_.improv_ble = value;
+      break;
+    case LedFlag::MASTER_MUTE:
+      this->facts_.master_mute = value;
+      break;
+    case LedFlag::MEDIA_MUTED:
+      this->facts_.media_muted = value;
+      break;
+    case LedFlag::NETWORK_OK:
+      this->facts_.network_ok = value;
+      break;
+    case LedFlag::TIMER_RINGING:
+      this->facts_.timer_ringing = value;
+      break;
+    case LedFlag::IS_TIMER_ACTIVE:
+      this->facts_.is_timer_active = value;
+      break;
+  }
+}
+
+void LedRingController::handle_event(LedEvent event, float value) {
+  switch (event) {
+    case LedEvent::WARNING:
+      this->facts_.warning = true;
+      break;
+    case LedEvent::JACK_PLUGGED:
+      this->facts_.jack_plugged = true;
+      break;
+    case LedEvent::JACK_UNPLUGGED:
+      this->facts_.jack_unplugged = true;
+      break;
+    case LedEvent::XMOS_FLASH_START:
+      this->facts_.xmos_flashing_state = XMOS_FLASHING;
+      break;
+    case LedEvent::XMOS_FLASH_PROGRESS:
+      this->facts_.xmos_flash_progress = value / 100.0f;
+      break;
+    case LedEvent::XMOS_SUCCESS:
+      this->facts_.xmos_flashing_state = XMOS_SUCCESS;
+      break;
+    case LedEvent::XMOS_ERROR:
+      this->facts_.xmos_flashing_state = XMOS_ERROR;
+      break;
+  }
+}
+
 void LedRingController::write_frame_(const FrameBuffer &frame) {
   auto &strip = *this->strip_out_;
   uint8_t n = std::min<uint8_t>(frame.size(), static_cast<uint8_t>(strip.size()));
@@ -127,104 +190,6 @@ void LedRingController::dump_config() {
   ESP_LOGCONFIG(TAG, "LedRingController:");
   ESP_LOGCONFIG(TAG, "  Strip LEDs: %d", this->strip_out_ != nullptr ? this->strip_out_->size() : 0);
   ESP_LOGCONFIG(TAG, "  Frame interval: %u ms", this->frame_interval_ms_);
-}
-
-void LedRingController::run_selftest_() {
-  // Temporary verification of issues 03/04/05. Remove before issue 07 merge.
-
-  // issue 05 — resolve() priority table.
-  auto check = [this](const char *name, const Facts &f, SceneId expect) {
-    SceneId got = this->sm_.resolve(f);
-    ESP_LOGD(TAG, "resolve %-16s -> %d (expect %d)%s", name, static_cast<int>(got),
-             static_cast<int>(expect), got == expect ? "" : "  <-- MISMATCH");
-  };
-  {
-    Facts f;
-    f.xmos_flashing_state = XMOS_FLASHING;
-    check("xmos_flashing", f, SceneId::XMOS_FLASH);
-  }
-  {
-    Facts f;
-    f.init_in_progress = true;
-    f.network_ok = false;
-    check("init_no_network", f, SceneId::INIT_NO_NETWORK);
-  }
-  {
-    Facts f;
-    f.init_in_progress = true;
-    f.network_ok = true;
-    check("init", f, SceneId::INIT);
-  }
-  {
-    Facts f;
-    f.init_in_progress = false;
-    f.network_ok = false;
-    check("no_ha", f, SceneId::NO_HA);
-  }
-  {
-    Facts f;
-    f.init_in_progress = false;
-    f.network_ok = true;
-    f.warning = true;
-    f.va_phase = VA_WAITING;
-    check("warning>va", f, SceneId::WARNING);
-  }
-  {
-    Facts f;
-    f.init_in_progress = false;
-    f.network_ok = true;
-    f.va_phase = VA_IDLE;
-    check("idle", f, SceneId::IDLE);
-  }
-  {
-    Facts f;
-    f.init_in_progress = false;
-    f.network_ok = true;
-    f.va_phase = VA_IDLE;
-    f.master_mute = true;
-    check("muted", f, SceneId::MUTED);
-  }
-  {
-    Facts f;
-    f.init_in_progress = false;
-    f.network_ok = true;
-    f.va_phase = VA_IDLE;
-    f.is_timer_active = true;
-    check("timer_tick", f, SceneId::TIMER_TICK);
-  }
-
-  // issue 04 — crossfade midpoint math.
-  {
-    FrameBuffer a(4), b(4);
-    a.fill({1.0f, 0.0f, 0.0f});
-    b.fill({0.0f, 0.0f, 1.0f});
-    auto mid = FrameBuffer::crossfade(a, b, 0.5f);
-    ESP_LOGD(TAG, "crossfade(red,blue,0.5): r=%.2f b=%.2f (expect 0.50 0.50)", mid[0].r, mid[0].b);
-  }
-
-  // issue 03 — two-layer composite with a predicate-gated overlay.
-  {
-    Scene sc;
-    Layer base;
-    base.anim = std::make_unique<SolidFill>(Pixel{0.0f, 0.0f, 1.0f});
-    sc.layers.push_back(std::move(base));
-
-    bool gate = true;
-    Layer overlay;
-    overlay.anim = std::make_unique<SolidFill>(Pixel{1.0f, 0.0f, 0.0f});
-    overlay.enabled_pred = [&gate] { return gate; };
-    sc.layers.push_back(std::move(overlay));
-
-    FrameBuffer out(4);
-    RenderCtx ctx{millis(), 0.0f, {}, 1.0f, true, 0.0f, 0.0f, 0.0f};
-
-    this->compositor_.render(out, sc, ctx);
-    ESP_LOGD(TAG, "2-layer gate=on : r=%.2f b=%.2f (expect 1.00 0.00)", out[0].r, out[0].b);
-
-    gate = false;
-    this->compositor_.render(out, sc, ctx);
-    ESP_LOGD(TAG, "2-layer gate=off: r=%.2f b=%.2f (expect 0.00 1.00)", out[0].r, out[0].b);
-  }
 }
 
 }  // namespace led_ring_controller

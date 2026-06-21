@@ -53,6 +53,23 @@ esphome:
   project:
     name: ${company_name}.${project_name}
     version: ${esp32_fw_version}
+  # TEMPORARY (issue 07): smoke-test every led_ring_controller action so the codegen and
+  # runtime paths are exercised. The xmos_* sequence and the flags settle back to a clean
+  # state. Remove during the issue 11 YAML migration, when real triggers drive these actions.
+  on_boot:
+    priority: -100
+    then:
+      - led_ring_controller.set_phase: 1
+      - led_ring_controller.set_flag:
+          flag: master_mute
+          value: false
+      - led_ring_controller.set_media_volume: 50%
+      - led_ring_controller.set_timer_ratio: 0%
+      - led_ring_controller.event: xmos_flash_start
+      - led_ring_controller.event:
+          event: xmos_flash_progress
+          value: 50.0
+      - led_ring_controller.event: xmos_success
 
 esp32_improv:
   authorizer: btn_action
