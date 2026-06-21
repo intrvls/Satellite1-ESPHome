@@ -11,6 +11,12 @@ void Compositor::render(FrameBuffer &out, const Scene &scene, const RenderCtx &c
     if (layer.enabled_pred && !layer.enabled_pred())
       continue;
 
+    // In-place layers edit the composited buffer directly (overlay markers cutting into base).
+    if (layer.in_place) {
+      layer.anim->render(out, ctx);
+      continue;
+    }
+
     this->scratch_.clear();
     layer.anim->render(this->scratch_, ctx);
 

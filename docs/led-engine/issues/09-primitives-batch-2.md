@@ -6,6 +6,22 @@
 
 Port the remaining primitives and all overlay markers, completing the effect catalog.
 
+> **Implementation notes.**
+> - Param structs use `Pixel` (engine float-RGB), not ESPHome's `Color` — the engine stays
+>   light-type-free. The 0-255 colours in this doc map to normalised `Pixel` values.
+> - **Overlay markers need a new `Layer::in_place` mode.** The compositor renders each layer
+>   into an isolated scratch buffer and blends it over the output, so a marker layer (which
+>   leaves most pixels black) would wipe the base. `in_place` layers instead render *directly*
+>   into the composited buffer, editing only their own pixels. `PositionMarkers`, the
+>   `TIMER_RING`/`TIMER_TICK`/`MUTED` overlays use it.
+> - `PositionMarkers` is parameterised as `{positions, run, guard, color}`: blank `guard` LEDs
+>   before, light `run` LEDs from each position, blank `guard` after. Mic = `run 1`; speaker =
+>   `run 3` (positions shifted to the first lit LED, e.g. `{2,8,14,20}`).
+> - The `TIMER_TICK` backwards sweep is implemented **inside `ProgressArc`** (`moving_tick`)
+>   rather than as a separate single-pixel `Sweep` overlay — it dims one *lit arc* pixel to 0.9
+>   exactly like the original, with no stray dot in the dark region. `Sweep` is therefore used
+>   only for `XMOS_FLASH` (progress-driven).
+
 ## Primitives
 
 ### `ProgressArc`

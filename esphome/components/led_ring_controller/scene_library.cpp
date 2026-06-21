@@ -12,10 +12,11 @@ namespace {
 
 // Reference colours (linear float 0..1), mirroring the originals in led_ring.yaml / control_leds.
 constexpr Pixel RED{1.0f, 0.0f, 0.0f};
+constexpr Pixel DARK_RED{0.784f, 0.0f, 0.0f};  // 200/255
 constexpr Pixel GREEN{0.0f, 1.0f, 0.0f};
 constexpr Pixel BLUE{0.0f, 0.0f, 1.0f};
-constexpr Pixel WARM_WHITE{1.0f, 0.89f, 0.71f};
-constexpr Pixel INIT_BLUE{0.094f, 0.733f, 0.949f};
+constexpr Pixel WARM_WHITE{1.0f, 0.890f, 0.710f};  // 255,227,181
+constexpr Pixel INIT_BLUE{0.094f, 0.733f, 0.949f};  // 24,187,242
 
 void add_layer(Scene &s, std::unique_ptr<Animation> anim) {
   Layer l;
@@ -23,13 +24,20 @@ void add_layer(Scene &s, std::unique_ptr<Animation> anim) {
   s.layers.push_back(std::move(l));
 }
 
+// Adds an in-place overlay layer gated by a predicate (used by marker overlays).
+void add_overlay(Scene &s, std::unique_ptr<Animation> anim, std::function<bool()> pred) {
+  Layer l;
+  l.anim = std::move(anim);
+  l.in_place = true;
+  l.enabled_pred = std::move(pred);
+  s.layers.push_back(std::move(l));
+}
+
 }  // namespace
 
 void SceneLibrary::build(Facts &facts) {
-  // NOTE: Every scene below currently uses the SolidFill stub primitive. The rich visuals
-  // (spins, pulses, ripples, arcs, marker overlays) replace most of these in issues 08-10.
-  // What is final here is the scene *structure*: priority slots, brightness modes, one-shot
-  // wiring, and the predicate/callback closures over `facts`.
+  // Scene *structure* (priority slots, brightness modes, one-shot wiring, predicate/callback
+  // closures over `facts`) plus the ported primitives from issues 08-09.
 
   // --- IDLE: user colour, respects light_on (off -> black). ---
   {
@@ -74,66 +82,67 @@ void SceneLibrary::build(Facts &facts) {
     add_layer(s, std::make_unique<FixedColorPulse>(RED, PulseParams{0.0f, 1.0f, 200, 0, {}}));
   }
 
-  // --- NOT_READY / NO_HA: red, fixed brightness. NOT_READY -> Twinkle in issue 09. ---
+  // --- NOT_READY / NO_HA: red twinkle, fixed brightness. ---
   {
     Scene &s = slot(SceneId::NOT_READY);
+    s.transition_in_ms = 200;
     s.brightness_mode = BrightnessMode::FIXED;
     s.fixed_brightness = 0.66f;
-    add_layer(s, std::make_unique<SolidFill>(RED));
+    add_layer(s, std::make_unique<Twinkle>(TwinkleParams{0.5f, RED}));
   }
   {
     Scene &s = slot(SceneId::NO_HA);
-    s.transition_in_ms = 400;
+    s.transition_in_ms = 300;
     s.brightness_mode = BrightnessMode::FIXED;
     s.fixed_brightness = 0.66f;
-    add_layer(s, std::make_unique<SolidFill>(RED));
+    add_layer(s, std::make_unique<Twinkle>(TwinkleParams{0.5f, RED}));
   }
 
   // --- Onboarding / connectivity. ---
   {
-    Scene &s = slot(SceneId::IMPROV);
+    Scene &s = slot(SceneId::IMPROV);  // warm-white twinkle
     s.brightness_mode = BrightnessMode::FIXED;
     s.fixed_brightness = 0.66f;
-    add_layer(s, std::make_unique<SolidFill>(WARM_WHITE));
+    add_layer(s, std::make_unique<Twinkle>(TwinkleParams{0.5f, WARM_WHITE}));
   }
   {
-    Scene &s = slot(SceneId::INIT);
+    Scene &s = slot(SceneId::INIT);  // blue twinkle
     s.brightness_mode = BrightnessMode::FIXED;
     s.fixed_brightness = 0.66f;
-    add_layer(s, std::make_unique<SolidFill>(INIT_BLUE));
+    add_layer(s, std::make_unique<Twinkle>(TwinkleParams{0.5f, INIT_BLUE}));
   }
   {
-    Scene &s = slot(SceneId::INIT_NO_NETWORK);
+    Scene &s = slot(SceneId::INIT_NO_NETWORK);  // solid warm white
     s.brightness_mode = BrightnessMode::FIXED;
     s.fixed_brightness = 0.33f;
     add_layer(s, std::make_unique<SolidFill>(WARM_WHITE));
   }
 
-  // --- Transient user interactions (base colour). ---
+  // --- VOLUME: media-volume progress arc, red zero indicator. ---
   {
     Scene &s = slot(SceneId::VOLUME);
     s.brightness_mode = BrightnessMode::BOOSTED;
-    add_layer(s, std::make_unique<SolidFill>(false));
+    add_layer(s, std::make_unique<ProgressArc>(ProgressArcParams{false, false, RED}));
   }
   {
-    Scene &s = slot(SceneId::ACTION_BUTTON);
+    Scene &s = slot(SceneId::ACTION_BUTTON);  // solid full-ring flash
     s.brightness_mode = BrightnessMode::BOOSTED;
     add_layer(s, std::make_unique<SolidFill>(false));
   }
 
   // --- Jack events: one-shot ripples; engine clears the owning fact via on_finished. ---
   {
-    Scene &s = slot(SceneId::JACK_PLUGGED);
-    s.brightness_mode = BrightnessMode::USER;
+    Scene &s = slot(SceneId::JACK_PLUGGED);  // outward ripple
+    s.brightness_mode = BrightnessMode::BOOSTED;
     s.one_shot = true;
-    add_layer(s, std::make_unique<SolidFill>(BLUE, 800));
+    add_layer(s, std::make_unique<Ripple>(RippleParams{true}));
     s.on_finished = [&facts] { facts.jack_plugged = false; };
   }
   {
-    Scene &s = slot(SceneId::JACK_UNPLUGGED);
+    Scene &s = slot(SceneId::JACK_UNPLUGGED);  // inward ripple
     s.brightness_mode = BrightnessMode::BOOSTED;
     s.one_shot = true;
-    add_layer(s, std::make_unique<SolidFill>(BLUE, 800));
+    add_layer(s, std::make_unique<Ripple>(RippleParams{false}));
     s.on_finished = [&facts] { facts.jack_unplugged = false; };
   }
 
@@ -148,38 +157,46 @@ void SceneLibrary::build(Facts &facts) {
     s.on_finished = [&facts] { facts.warning = false; };
   }
 
-  // --- Timer scenes (base colour). MUTED markers (issue 10) replace the stub overlay below. ---
+  // --- TIMER_RING: pulsing full ring + 2-position mute overlay (positions [3,9], NOT 4). ---
   {
     Scene &s = slot(SceneId::TIMER_RING);
     s.brightness_mode = BrightnessMode::BOOSTED;
-    add_layer(s, std::make_unique<SolidFill>(false));
+    add_layer(s, std::make_unique<Pulse>(PulseParams{0.0f, 1.0f, 200, 0, {}}));
+    add_overlay(s, std::make_unique<PositionMarkers>(PositionMarkersParams{{3, 9}, 1, 1, RED}),
+                [&facts] { return facts.master_mute; });
   }
+
+  // --- TIMER_TICK: time-remaining progress arc + backwards-sweeping tick. ---
   {
     Scene &s = slot(SceneId::TIMER_TICK);
     s.brightness_mode = BrightnessMode::BOOSTED;
-    add_layer(s, std::make_unique<SolidFill>(false));
+    add_layer(s, std::make_unique<ProgressArc>(
+                     ProgressArcParams{true, false, {0.0f, 0.0f, 0.0f}, true, 100}));
+    // Mute markers at quadrant tops while master_mute is set.
+    add_overlay(s, std::make_unique<PositionMarkers>(PositionMarkersParams{{3, 9}, 1, 1, RED}),
+                [&facts] { return facts.master_mute; });
   }
 
-  // --- MUTED: two-layer scene demonstrating a predicate-gated overlay. ---
-  // Layer 0: base colour. Layer 1: red marker overlay, only when master_mute is set.
+  // --- MUTED: solid base + independently gated mic/speaker marker overlays. ---
   {
     Scene &s = slot(SceneId::MUTED);
     s.brightness_mode = BrightnessMode::BOOSTED;
     add_layer(s, std::make_unique<SolidFill>(false));
-
-    Layer marker;
-    marker.anim = std::make_unique<SolidFill>(RED);
-    marker.alpha = 1.0f;
-    marker.enabled_pred = [&facts] { return facts.master_mute; };
-    s.layers.push_back(std::move(marker));
+    // Mic markers: single red LED at each {0,6,12,18}, blanked either side.
+    add_overlay(s, std::make_unique<PositionMarkers>(PositionMarkersParams{{0, 6, 12, 18}, 1, 1, RED}),
+                [&facts] { return facts.master_mute; });
+    // Speaker markers: 3 dark-red LEDs starting at {2,8,14,20}, blanked either side.
+    add_overlay(s,
+                std::make_unique<PositionMarkers>(PositionMarkersParams{{2, 8, 14, 20}, 3, 1, DARK_RED}),
+                [&facts] { return facts.media_muted; });
   }
 
   // --- XMOS flashing pipeline. ---
   {
-    Scene &s = slot(SceneId::XMOS_FLASH);
+    Scene &s = slot(SceneId::XMOS_FLASH);  // blue sweep wiping as progress advances
     s.brightness_mode = BrightnessMode::FIXED;
     s.fixed_brightness = 0.6f;
-    add_layer(s, std::make_unique<SolidFill>(BLUE));
+    add_layer(s, std::make_unique<Sweep>(SweepParams{false, BLUE, 0}));
   }
   {
     Scene &s = slot(SceneId::XMOS_SUCCESS);  // 2-cycle green pulse
