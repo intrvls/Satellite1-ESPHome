@@ -83,11 +83,11 @@ media_player:
         - http_media_source
 
     on_mute:
-      - script.execute: control_leds
+      - led_ring_controller.set_media_volume: !lambda "return id(external_media_player).is_muted() ? 0.0f : id(external_media_player).volume;"
     on_unmute:
-      - script.execute: control_leds
+      - led_ring_controller.set_media_volume: !lambda "return id(external_media_player).is_muted() ? 0.0f : id(external_media_player).volume;"
     on_volume:
-      - script.execute: control_leds
+      - led_ring_controller.set_media_volume: !lambda "return id(external_media_player).is_muted() ? 0.0f : id(external_media_player).volume;"
     # Apply audio ducking when an announcement starts
     on_announcement:
       - mixer_speaker.apply_ducking:
@@ -154,7 +154,9 @@ script:
           id: play_sound
           priority: true
           sound_file: "volume_change_sound"
-      - script.execute: control_leds
+      - led_ring_controller.set_media_volume: !lambda "return id(external_media_player).is_muted() ? 0.0f : id(external_media_player).volume;"
+      # YAML retains ownership of this 2s momentary-clear timer.
       - delay: 2s
-      - lambda: id(volume_buttons_touched) = false;
-      - script.execute: control_leds
+      - led_ring_controller.set_flag:
+          flag: volume_buttons_touched
+          value: false
