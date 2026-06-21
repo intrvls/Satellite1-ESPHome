@@ -34,28 +34,47 @@ void SceneLibrary::build(Facts &facts) {
   // --- IDLE: user colour, respects light_on (off -> black). ---
   {
     Scene &s = slot(SceneId::IDLE);
-    s.transition_in_ms = 400;
+    s.transition_in_ms = 500;
     s.brightness_mode = BrightnessMode::USER;
     add_layer(s, std::make_unique<SolidFill>());  // base colour, respect light_on
   }
 
-  // --- Voice assistant phases (base colour, always lit). ---
-  for (SceneId id : {SceneId::WAITING, SceneId::LISTENING, SceneId::REPLYING, SceneId::THINKING}) {
-    Scene &s = slot(id);
+  // --- Voice assistant phases: rotating blobs + thinking blink. ---
+  {
+    Scene &s = slot(SceneId::WAITING);  // slow CW spin
+    s.transition_in_ms = 300;
+    s.brightness_mode = BrightnessMode::USER;
+    add_layer(s, std::make_unique<RotatingBlob>(RotatingBlobParams{0.5f, 2}));
+  }
+  {
+    Scene &s = slot(SceneId::LISTENING);  // fast CW spin
     s.transition_in_ms = 200;
     s.brightness_mode = BrightnessMode::USER;
-    add_layer(s, std::make_unique<SolidFill>(false));  // base colour, ignore light_on
+    add_layer(s, std::make_unique<RotatingBlob>(RotatingBlobParams{1.0f, 2}));
+  }
+  {
+    Scene &s = slot(SceneId::REPLYING);  // fast CCW spin
+    s.transition_in_ms = 200;
+    s.brightness_mode = BrightnessMode::USER;
+    add_layer(s, std::make_unique<RotatingBlob>(RotatingBlobParams{-1.0f, 2}));
+  }
+  {
+    Scene &s = slot(SceneId::THINKING);  // blink at positions 2 + 14
+    s.transition_in_ms = 200;
+    s.brightness_mode = BrightnessMode::USER;
+    add_layer(s, std::make_unique<Pulse>(PulseParams{0.0f, 1.0f, 200, 0, {2, 14}}));
   }
 
-  // --- ERROR: sustained red pulse (kept while va_phase == VA_ERROR). ---
+  // --- ERROR: sustained red pulse (NOT a one-shot; kept while va_phase == VA_ERROR). ---
   {
     Scene &s = slot(SceneId::ERROR);
     s.transition_in_ms = 200;
-    s.brightness_mode = BrightnessMode::BOOSTED;
-    add_layer(s, std::make_unique<SolidFill>(RED));
+    s.brightness_mode = BrightnessMode::FIXED;
+    s.fixed_brightness = 0.8f;
+    add_layer(s, std::make_unique<FixedColorPulse>(RED, PulseParams{0.0f, 1.0f, 200, 0, {}}));
   }
 
-  // --- NOT_READY / NO_HA: red, fixed brightness. ---
+  // --- NOT_READY / NO_HA: red, fixed brightness. NOT_READY -> Twinkle in issue 09. ---
   {
     Scene &s = slot(SceneId::NOT_READY);
     s.brightness_mode = BrightnessMode::FIXED;
@@ -118,13 +137,14 @@ void SceneLibrary::build(Facts &facts) {
     s.on_finished = [&facts] { facts.jack_unplugged = false; };
   }
 
-  // --- WARNING: one-shot red pulse; engine clears facts.warning via on_finished. ---
+  // --- WARNING: one-shot 5-cycle red pulse; engine clears facts.warning via on_finished. ---
   {
     Scene &s = slot(SceneId::WARNING);
     s.transition_in_ms = 100;
-    s.brightness_mode = BrightnessMode::BOOSTED;
+    s.brightness_mode = BrightnessMode::FIXED;
+    s.fixed_brightness = 0.8f;
     s.one_shot = true;
-    add_layer(s, std::make_unique<SolidFill>(RED, 2000));
+    add_layer(s, std::make_unique<FixedColorPulse>(RED, PulseParams{0.0f, 1.0f, 200, 5, {}}));
     s.on_finished = [&facts] { facts.warning = false; };
   }
 
@@ -162,28 +182,31 @@ void SceneLibrary::build(Facts &facts) {
     add_layer(s, std::make_unique<SolidFill>(BLUE));
   }
   {
-    Scene &s = slot(SceneId::XMOS_SUCCESS);
+    Scene &s = slot(SceneId::XMOS_SUCCESS);  // 2-cycle green pulse
     s.brightness_mode = BrightnessMode::FIXED;
-    s.fixed_brightness = 0.6f;
+    s.fixed_brightness = 0.8f;
     s.one_shot = true;
-    add_layer(s, std::make_unique<SolidFill>(GREEN, 1000));
+    add_layer(s, std::make_unique<FixedColorPulse>(GREEN, PulseParams{0.0f, 1.0f, 200, 2, {}}));
     s.on_finished = [&facts] { facts.xmos_flashing_state = XMOS_IDLE; };
   }
   {
-    Scene &s = slot(SceneId::XMOS_ERROR);
+    Scene &s = slot(SceneId::XMOS_ERROR);  // 2-cycle red pulse
     s.brightness_mode = BrightnessMode::FIXED;
-    s.fixed_brightness = 0.6f;
+    s.fixed_brightness = 0.8f;
     s.one_shot = true;
-    add_layer(s, std::make_unique<SolidFill>(RED, 1000));
+    add_layer(s, std::make_unique<FixedColorPulse>(RED, PulseParams{0.0f, 1.0f, 200, 2, {}}));
     s.on_finished = [&facts] { facts.xmos_flashing_state = XMOS_IDLE; };
   }
 
-  // --- SUCCESS: standalone green pulse (not reachable via resolve(); triggered elsewhere). ---
+  // --- SUCCESS: standalone 2-cycle green pulse (not reachable via resolve(); triggered
+  // elsewhere). Identical visuals to XMOS_SUCCESS. ---
   {
     Scene &s = slot(SceneId::SUCCESS);
-    s.brightness_mode = BrightnessMode::BOOSTED;
+    s.brightness_mode = BrightnessMode::FIXED;
+    s.fixed_brightness = 0.8f;
     s.one_shot = true;
-    add_layer(s, std::make_unique<SolidFill>(GREEN, 1000));
+    add_layer(s, std::make_unique<FixedColorPulse>(GREEN, PulseParams{0.0f, 1.0f, 200, 2, {}}));
+    s.on_finished = [&facts] { facts.xmos_flashing_state = XMOS_IDLE; };
   }
 }
 
