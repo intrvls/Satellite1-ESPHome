@@ -466,52 +466,69 @@ script:
   # This script will be called every time one of these conditions is changing.
   - id: control_leds
     then:
-      - lambda: |
+      # =========================================================================================
+      # TEMP — LED engine test bridge (issue 11 preview). Instead of driving voice_assistant_leds
+      # via the child scripts below, translate the same legacy globals into led_ring_controller
+      # actions so the native engine becomes the sole strip writer and is driven by real device
+      # events. Revert with:  git checkout config/common/led_ring.yaml
+      # =========================================================================================
+      - lambda: |-
           id(check_if_timers_active).execute();
-          if (id(is_timer_active)){
-            id(fetch_first_active_timer).execute();
-          }
-          if (id(xmos_flashing_state) > 0) {
-            id(control_leds_xmos_flasher_state_update).execute();
-          } else if (id(improv_ble_in_progress)) {
-            id(control_leds_improv_ble_state).execute();
-          } else if (id(init_in_progress)) {
-            id(control_leds_init_state).execute();
-          } else if (!id(wifi_id).is_connected() || !id(api_id).is_connected()){
-            id(control_leds_no_ha_connection_state).execute();
-          } else if (id(volume_buttons_touched)) {
-            id(control_leds_volume_buttons_touched).execute();
-          } else if (id(btn_action).state) {
-            id(control_leds_action_button_touched).execute();
-          } else if (id(jack_plugged_recently)) {
-            id(control_leds_jack_plugged_recently).execute();
-          } else if (id(jack_unplugged_recently)) {
-            id(control_leds_jack_unplugged_recently).execute();
-          } else if (id(warning)) {
-            id(control_leds_warning).execute();
-          } else if (id(timer_ringing).state) {
-            id(control_leds_timer_ringing).execute();
-          } else if (id(voice_assistant_phase) == ${voice_assist_waiting_for_command_phase_id}) {
-            id(control_leds_voice_assistant_waiting_for_command_phase).execute();
-          } else if (id(voice_assistant_phase) == ${voice_assist_listening_for_command_phase_id}) {
-            id(control_leds_voice_assistant_listening_for_command_phase).execute();
-          } else if (id(voice_assistant_phase) == ${voice_assist_thinking_phase_id}) {
-            id(control_leds_voice_assistant_thinking_phase).execute();
-          } else if (id(voice_assistant_phase) == ${voice_assist_replying_phase_id}) {
-            id(control_leds_voice_assistant_replying_phase).execute();
-          } else if (id(voice_assistant_phase) == ${voice_assist_error_phase_id}) {
-            id(control_leds_voice_assistant_error_phase).execute();
-          } else if (id(voice_assistant_phase) == ${voice_assist_not_ready_phase_id}) {
-            id(control_leds_voice_assistant_not_ready_phase).execute();
-          } else if (id(is_timer_active)) {
-            id(control_leds_timer_ticking).execute();
-          } else if (id(master_mute_switch).state) {
-            id(control_leds_muted_or_silent).execute();
-          } else if (id(external_media_player).volume == 0.0f || id(external_media_player).is_muted()) {
-            id(control_leds_muted_or_silent).execute();
-          } else if (id(voice_assistant_phase) == ${voice_assist_idle_phase_id}) {
-            id(control_leds_voice_assistant_idle_phase).execute();
-          }
+          if (id(is_timer_active)) { id(fetch_first_active_timer).execute(); }
+      - led_ring_controller.set_flag:
+          flag: init_in_progress
+          value: !lambda "return id(init_in_progress);"
+      - led_ring_controller.set_flag:
+          flag: network_ok
+          value: !lambda "return id(wifi_id).is_connected() && id(api_id).is_connected();"
+      - led_ring_controller.set_flag:
+          flag: improv_ble
+          value: !lambda "return id(improv_ble_in_progress);"
+      - led_ring_controller.set_flag:
+          flag: master_mute
+          value: !lambda "return id(master_mute_switch).state;"
+      - led_ring_controller.set_media_volume: !lambda "return id(external_media_player).is_muted() ? 0.0f : id(external_media_player).volume;"
+      - led_ring_controller.set_flag:
+          flag: volume_buttons_touched
+          value: !lambda "return id(volume_buttons_touched);"
+      - led_ring_controller.set_flag:
+          flag: btn_action
+          value: !lambda "return id(btn_action).state;"
+      - led_ring_controller.set_flag:
+          flag: warning
+          value: !lambda "return id(warning);"
+      - led_ring_controller.set_flag:
+          flag: timer_ringing
+          value: !lambda "return id(timer_ringing).state;"
+      - led_ring_controller.set_flag:
+          flag: is_timer_active
+          value: !lambda "return id(is_timer_active);"
+      - led_ring_controller.set_timer_ratio: !lambda |-
+          if (!id(is_timer_active)) return 0.0f;
+          return (float) id(first_active_timer).seconds_left /
+                 (float) std::max(id(first_active_timer).total_seconds, (uint32_t) 1);
+      - led_ring_controller.set_flag:
+          flag: jack_plugged
+          value: !lambda "return id(jack_plugged_recently);"
+      - led_ring_controller.set_flag:
+          flag: jack_unplugged
+          value: !lambda "return id(jack_unplugged_recently);"
+      - led_ring_controller.set_phase: !lambda "return id(voice_assistant_phase);"
+      - if:
+          condition:
+            lambda: "return id(xmos_flashing_state) == 1;"
+          then:
+            - led_ring_controller.event: xmos_flash_start
+      - if:
+          condition:
+            lambda: "return id(xmos_flashing_state) == 2;"
+          then:
+            - led_ring_controller.event: xmos_success
+      - if:
+          condition:
+            lambda: "return id(xmos_flashing_state) == 3;"
+          then:
+            - led_ring_controller.event: xmos_error
 
   # Script executed during Improv BLE
   # Warm White Twinkle
@@ -738,3 +755,13 @@ script:
             - delay: 1s
             - light.turn_off:
                 id: voice_assistant_leds
+
+# ===========================================================================================
+# TEMP — LED engine test scaffold. Refreshes the engine facts ~1x/sec so live-changing values
+# (media volume, timer countdown) track without waiting for a discrete event. Pairs with the
+# control_leds bridge above. Revert with:  git checkout config/common/led_ring.yaml
+# ===========================================================================================
+interval:
+  - interval: 1s
+    then:
+      - script.execute: control_leds

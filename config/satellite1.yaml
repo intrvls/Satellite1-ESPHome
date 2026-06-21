@@ -3,7 +3,7 @@ substitutions:
   project_name: Satellite1
 
   # set this version by GHA at build time
-  esp32_fw_version: v0.2.0-intrvls
+  esp32_fw_version: v0.2.0-intrvls.1
 
 packages:
   # This is an inline package to prefix the on_client_connected with the wait_until action
@@ -115,6 +115,7 @@ led_ring_controller:
   strip_id: hw_led_ring
   user_light_id: led_ring
   frame_interval: 20ms
+  enable_json_loader: true   # TEMP (test scaffold): boot-validates default_scenes.json + enables load_scenes
 
 external_components:
   - source:
