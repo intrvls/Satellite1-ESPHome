@@ -4,6 +4,8 @@
 #include "state_machine.h"
 
 #include <array>
+#include <utility>
+#include <vector>
 
 namespace esphome {
 namespace led_ring_controller {
@@ -16,6 +18,13 @@ class SceneLibrary {
   void build(Facts &facts);
 
   const Scene &get(SceneId id) const { return scenes_[static_cast<size_t>(id)]; }
+
+  // Replace individual scene slots with runtime-built scenes (from SceneFactory). Only the
+  // provided scenes are overwritten; the rest keep their compiled definitions.
+  void install(std::vector<Scene> &&scenes) {
+    for (auto &s : scenes)
+      scenes_[static_cast<size_t>(s.id)] = std::move(s);
+  }
 
  private:
   // Returns the slot for id, stamping its id field. Used by build().

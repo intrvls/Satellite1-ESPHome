@@ -11,6 +11,14 @@
 #include "state_machine.h"
 #include "transition.h"
 
+#include <string>
+
+#ifdef USE_LED_RING_JSON_LOADER
+#include "scene_factory.h"
+#include <utility>
+#include <vector>
+#endif
+
 namespace esphome {
 namespace led_ring_controller {
 
@@ -63,11 +71,23 @@ class LedRingController : public Component {
   void set_timer_ratio(float ratio) { this->facts_.timer_ratio = ratio; }
   void handle_event(LedEvent event, float value);
 
+#ifdef USE_LED_RING_JSON_LOADER
+  void set_default_scenes_json(const char *json) { this->default_scenes_json_ = json; }
+#endif
+  // Parse and install a JSON scene set at runtime (e.g. from an HA service call). Returns false
+  // on any parse/validation error (active scenes unchanged), or if the JSON loader was not
+  // enabled at build time (enable_json_loader).
+  bool load_scenes(const std::string &json);
+
  protected:
   // Converts the work buffer (linear float RGB) to the AddressableLight and schedules a show.
   // Per-channel: uint8_t(clamp(v, 0, 1) * 255 + 0.5). GRB ordering + the strip's configured
   // colour/gamma correction are handled by ESPHome's ESPColorView, matching the prior system.
   void write_frame_(const FrameBuffer &frame);
+
+  // Selects the active scene. Uses the JSON priority table if one has been installed; otherwise
+  // the compiled StateMachine table.
+  SceneId resolve_scene_();
 
   light::AddressableLightState *strip_{nullptr};
   light::LightState *user_light_{nullptr};
@@ -87,6 +107,11 @@ class LedRingController : public Component {
 
   SceneId active_scene_{SceneId::IDLE};
   uint32_t last_frame_ms_{0};
+
+#ifdef USE_LED_RING_JSON_LOADER
+  const char *default_scenes_json_{nullptr};
+  std::vector<PriorityRule> json_priority_;  // empty -> use the compiled StateMachine table
+#endif
 };
 
 }  // namespace led_ring_controller

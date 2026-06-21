@@ -35,6 +35,22 @@ void LedRingController::setup() {
   this->library_.build(this->facts_);
   this->facts_.init_in_progress = true;  // seed correct boot state
   this->last_frame_ms_ = millis();
+
+#ifdef USE_LED_RING_JSON_LOADER
+  // Validate the embedded default scene set parses (single source of truth check). Does not
+  // replace the compiled scenes — call load_scenes() to install at runtime.
+  if (this->default_scenes_json_ != nullptr) {
+    SceneFactory factory(this->facts_);
+    std::vector<Scene> scenes;
+    std::vector<PriorityRule> priority;
+    if (factory.load(this->default_scenes_json_, scenes, priority)) {
+      ESP_LOGD(TAG, "default_scenes.json OK: %u scenes, %u priority rules",
+               static_cast<unsigned>(scenes.size()), static_cast<unsigned>(priority.size()));
+    } else {
+      ESP_LOGE(TAG, "default_scenes.json failed to parse");
+    }
+  }
+#endif
 }
 
 void LedRingController::loop() {
@@ -51,7 +67,7 @@ void LedRingController::loop() {
   auto lv = this->user_light_->current_values;
   Pixel base_color{lv.get_red(), lv.get_green(), lv.get_blue()};
 
-  SceneId next_id = this->sm_.resolve(this->facts_);
+  SceneId next_id = this->resolve_scene_();
   const Scene &scene = this->library_.get(next_id);
 
   float raw_b = lv.get_brightness();
@@ -175,6 +191,40 @@ void LedRingController::handle_event(LedEvent event, float value) {
       this->facts_.xmos_flashing_state = XMOS_ERROR;
       break;
   }
+}
+
+SceneId LedRingController::resolve_scene_() {
+#ifdef USE_LED_RING_JSON_LOADER
+  if (!this->json_priority_.empty()) {
+    for (auto &rule : this->json_priority_) {
+      if (rule.first && rule.first())
+        return rule.second;
+    }
+    return SceneId::IDLE;  // no rule matched (a well-formed table ends with a default)
+  }
+#endif
+  return this->sm_.resolve(this->facts_);
+}
+
+bool LedRingController::load_scenes(const std::string &json) {
+#ifdef USE_LED_RING_JSON_LOADER
+  SceneFactory factory(this->facts_);
+  std::vector<Scene> scenes;
+  std::vector<PriorityRule> priority;
+  if (!factory.load(json, scenes, priority))
+    return false;
+
+  this->library_.install(std::move(scenes));
+  this->json_priority_ = std::move(priority);
+  // Force a fresh scene resolution + crossfade on the next frame.
+  this->active_scene_ = SceneId::IDLE;
+  ESP_LOGI(TAG, "installed %u JSON priority rules", static_cast<unsigned>(this->json_priority_.size()));
+  return true;
+#else
+  (void) json;
+  ESP_LOGW(TAG, "JSON loader disabled; set enable_json_loader: true to use load_scenes");
+  return false;
+#endif
 }
 
 void LedRingController::write_frame_(const FrameBuffer &frame) {

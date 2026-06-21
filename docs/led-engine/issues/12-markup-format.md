@@ -8,6 +8,26 @@
 Make scenes and the priority table describable in **JSON** so they can be defined or edited
 without recompiling — eventually pushable at runtime from Home Assistant.
 
+> **Implementation notes (as built).**
+> - Param colours are `Pixel` (engine float-RGB), parsed from `"user"` or `"#RRGGBB"`. The
+>   `SceneFactory` public surface is just `load(json, scenes_out, priority_out)`; ArduinoJson is
+>   confined to `scene_factory.cpp` (via ESPHome's `json::parse_json`), so the rest of the engine
+>   never sees JSON.
+> - **`one_shot` / `on_finished` are derived from the scene id** (`apply_oneshot_semantics`),
+>   not encoded in JSON — the clear-ownership contract is fixed, so JSON stays purely visual.
+> - **Predicate grammar** (bounded, not arbitrary): a fact name, `!fact`, `factA && factB`,
+>   `phase == <int>`, or `xmos_flashing_state == <int>`. This is enough for `default_scenes.json`
+>   to reproduce the full hardcoded priority table (`master_mute`/`media_muted` become two rows;
+>   the INIT split uses `init_in_progress && network_ok` then `init_in_progress`).
+> - `markers` params are `{positions, run, guard, color}` (matching issue 09); `width` is
+>   accepted as an alias for `guard`.
+> - `load_scenes()` is always declared; when the flag is off it is a stub that logs and returns
+>   false, so `LoadScenesAction` compiles regardless. The ArduinoJson parser body, the embedded
+>   JSON, and the `json_priority_` table are all `#ifdef USE_LED_RING_JSON_LOADER`.
+> - On boot the embedded `default_scenes.json` is **parsed and validated** (logged), not
+>   auto-installed — the compiled `SceneLibrary` stays live by default; `load_scenes` installs a
+>   set at runtime. The component `AUTO_LOAD`s `json`.
+
 ## Scope
 
 ### `engine/scene_factory.h/.cpp`

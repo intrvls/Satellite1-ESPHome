@@ -1,3 +1,5 @@
+import os
+
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome import automation
@@ -5,6 +7,7 @@ from esphome.components import light
 from esphome.const import CONF_ID, CONF_VALUE
 
 CODEOWNERS = ["@futureproofhomes"]
+AUTO_LOAD = ["json"]
 
 led_ring_controller_ns = cg.esphome_ns.namespace("led_ring_controller")
 LedRingController = led_ring_controller_ns.class_("LedRingController", cg.Component)
@@ -12,6 +15,7 @@ LedRingController = led_ring_controller_ns.class_("LedRingController", cg.Compon
 CONF_STRIP_ID = "strip_id"
 CONF_USER_LIGHT_ID = "user_light_id"
 CONF_FRAME_INTERVAL = "frame_interval"
+CONF_ENABLE_JSON_LOADER = "enable_json_loader"
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -19,6 +23,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Required(CONF_STRIP_ID): cv.use_id(light.AddressableLightState),
         cv.Required(CONF_USER_LIGHT_ID): cv.use_id(light.LightState),
         cv.Optional(CONF_FRAME_INTERVAL, default="20ms"): cv.positive_time_period_milliseconds,
+        cv.Optional(CONF_ENABLE_JSON_LOADER, default=False): cv.boolean,
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -34,6 +39,16 @@ async def to_code(config):
     cg.add(var.set_user_light(user_light))
 
     cg.add(var.set_frame_interval_ms(config[CONF_FRAME_INTERVAL].total_milliseconds))
+
+    # The JSON scene parser (~6 KB ArduinoJson) is compiled in only when requested. When enabled,
+    # the checked-in default scene set is embedded and validated at boot as the single source of
+    # truth, and the led_ring_controller.load_scenes action becomes usable at runtime.
+    if config[CONF_ENABLE_JSON_LOADER]:
+        cg.add_build_flag("-DUSE_LED_RING_JSON_LOADER")
+        json_path = os.path.join(os.path.dirname(__file__), "default_scenes.json")
+        with open(json_path, encoding="utf-8") as f:
+            default_scenes = f.read()
+        cg.add(var.set_default_scenes_json(default_scenes))
 
 
 # --- Actions -----------------------------------------------------------------
@@ -76,6 +91,9 @@ SetFlagAction = led_ring_controller_ns.class_("SetFlagAction", automation.Action
 SetMediaVolumeAction = led_ring_controller_ns.class_("SetMediaVolumeAction", automation.Action)
 SetTimerRatioAction = led_ring_controller_ns.class_("SetTimerRatioAction", automation.Action)
 EventAction = led_ring_controller_ns.class_("EventAction", automation.Action)
+LoadScenesAction = led_ring_controller_ns.class_("LoadScenesAction", automation.Action)
+
+CONF_SCENES = "scenes"
 
 SET_PHASE_SCHEMA = cv.maybe_simple_value(
     {
@@ -168,4 +186,24 @@ async def event_to_code(config, action_id, template_arg, args):
     if CONF_VALUE in config:
         template_ = await cg.templatable(config[CONF_VALUE], args, cg.float_)
         cg.add(var.set_value(template_))
+    return var
+
+
+LOAD_SCENES_SCHEMA = cv.maybe_simple_value(
+    {
+        cv.GenerateID(): cv.use_id(LedRingController),
+        cv.Required(CONF_SCENES): cv.templatable(cv.string),
+    },
+    key=CONF_SCENES,
+)
+
+
+@automation.register_action(
+    "led_ring_controller.load_scenes", LoadScenesAction, LOAD_SCENES_SCHEMA, synchronous=True
+)
+async def load_scenes_to_code(config, action_id, template_arg, args):
+    var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(var, config[CONF_ID])
+    template_ = await cg.templatable(config[CONF_SCENES], args, cg.std_string)
+    cg.add(var.set_scenes(template_))
     return var
