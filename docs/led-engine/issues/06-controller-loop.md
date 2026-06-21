@@ -30,14 +30,16 @@ class LedRingController : public Component {
 ```
 
 `library_.build(facts_)` is called in `setup()` after resolving LED count. Both `work_` and
-`prev_` are sized to match the strip's actual LED count from
-`strip_->get_addressable()->size()`.
+`prev_` are sized to match the strip's actual LED count. `LightState` has no `get_addressable()`
+in this ESPHome version — reach the `AddressableLight` via `get_output()` and cast (resolved
+once into `strip_out_`).
 
 ### `setup()`
 
 ```cpp
 void LedRingController::setup() {
-  uint8_t num_leds = strip_->get_addressable()->size();
+  strip_out_ = static_cast<light::AddressableLight *>(strip_->get_output());
+  uint8_t num_leds = strip_out_->size();
   work_  = FrameBuffer(num_leds);
   prev_  = FrameBuffer(num_leds);
   compositor_ = Compositor(num_leds);  // internal scratch buffer sized here too
@@ -100,8 +102,7 @@ void LedRingController::setup() {
 
 7. COMMIT
    prev_ = work_;
-   work_.write_to_strip(*strip_->get_addressable());
-   strip_->get_addressable()->schedule_show();
+   write_frame_(work_);   // controller-owned: float-RGB -> ESPColorView::set_rgb, then schedule_show()
 
 8. last_frame_ms_ = now_ms;
 ```
@@ -114,12 +115,16 @@ sufficient — full primitives come in issues 08–09.
 
 ### Brightness / gamma note
 
-Engine output is linear float 0..1. `write_to_strip` converts per channel as
-`uint8_t(clamp(v, 0.f, 1.f) * 255.f + 0.5f)`. No additional gamma or brightness
-multiplication is applied in the controller — `base_brightness` is already folded into
-each animation's render output. The RMT strip outputs raw bytes; ESPHome strip-level
-correction is not applied because `hw_led_ring` is `internal: true` and we write via the
-`AddressableLight` pointer directly.
+Engine output is linear float 0..1. The controller's `write_frame_()` converts per channel as
+`uint8_t(clamp(v, 0.f, 1.f) * 255.f + 0.5f)` and writes via `ESPColorView::set_rgb`. No
+brightness multiplication is applied at write time — `base_brightness` is already folded into
+each animation's render output.
+
+Writing through `ESPColorView` means the strip's configured colour/gamma correction **is**
+applied (default `gamma_correct: 2.8`), exactly as the previous `addressable_lambda` effects
+did (`it[i] = color`). `internal: true` does not disable this correction — it only hides the
+strip from Home Assistant and stops other components scheduling shows. Keeping the correction
+preserves visual parity with the old system, so `hw_led_ring` is left at its default gamma.
 
 ### Preventing double-write with `led_ring`
 
@@ -132,11 +137,18 @@ acceptable.
 ## Acceptance
 
 - On device, idle scene reflects `led_ring` color and brightness.
-- A manual `facts_.warning = true` flip (temporary test setter in `dump_config`) causes the
-  ring to crossfade to the warning/stub scene over `transition_in_ms`.
 - No flicker or double-write artifacts.
 - `ESP_LOGW` if `loop()` is running slower than `frame_interval_ms_ * 1.5` (detect
   scheduling overload early).
+- A temporary `run_selftest_()` (called at the end of `setup()`, removed before issue 07 merge)
+  logs the issue 03/04/05 acceptance checks: the `resolve()` priority table for representative
+  `Facts`, the `crossfade` midpoint, and a two-layer predicate-gated composite.
+
+> The original plan was a manual `facts_.warning = true` flip in `dump_config` to watch a live
+> crossfade. There is no runtime path to mutate `facts_` until the actions API lands in issue
+> 07, so on-device fact-driven scene changes (and their crossfades) are verified there. This
+> milestone proves the pipeline renders a correct idle scene and that scene selection +
+> compositing + crossfade math are correct via `run_selftest_()`.
 
 ## Notes
 
