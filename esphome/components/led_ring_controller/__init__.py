@@ -2,9 +2,9 @@ import os
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
-from esphome import automation
+from esphome import automation, pins
 from esphome.components import light
-from esphome.const import CONF_ID, CONF_VALUE
+from esphome.const import CONF_ID, CONF_NUM_LEDS, CONF_PIN, CONF_RGB_ORDER, CONF_VALUE
 
 CODEOWNERS = ["@futureproofhomes"]
 AUTO_LOAD = ["json"]
@@ -12,16 +12,25 @@ AUTO_LOAD = ["json"]
 led_ring_controller_ns = cg.esphome_ns.namespace("led_ring_controller")
 LedRingController = led_ring_controller_ns.class_("LedRingController", cg.Component)
 
-CONF_STRIP_ID = "strip_id"
 CONF_USER_LIGHT_ID = "user_light_id"
 CONF_FRAME_INTERVAL = "frame_interval"
 CONF_ENABLE_JSON_LOADER = "enable_json_loader"
+CONF_RENDER_CORE = "render_core"
+
+# Source-channel index for each WS2812 output byte position. WS2812 is GRB on the wire.
+_CHANNEL_INDEX = {"R": 0, "G": 1, "B": 2}
+RGB_ORDERS = ["RGB", "RBG", "GRB", "GBR", "BGR", "BRG"]
 
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(LedRingController),
-        cv.Required(CONF_STRIP_ID): cv.use_id(light.AddressableLightState),
         cv.Required(CONF_USER_LIGHT_ID): cv.use_id(light.LightState),
+        cv.Required(CONF_PIN): pins.internal_gpio_output_pin_number,
+        cv.Optional(CONF_NUM_LEDS, default=24): cv.positive_not_null_int,
+        cv.Optional(CONF_RGB_ORDER, default="GRB"): cv.one_of(*RGB_ORDERS, upper=True),
+        # The render+transmit task is pinned to this core so it never contends with the main
+        # loop / WiFi on core 0. Defaults to core 1 (the app's "other" core on the ESP32-S3).
+        cv.Optional(CONF_RENDER_CORE, default=1): cv.one_of(0, 1, int=True),
         cv.Optional(CONF_FRAME_INTERVAL, default="20ms"): cv.positive_time_period_milliseconds,
         cv.Optional(CONF_ENABLE_JSON_LOADER, default=False): cv.boolean,
     }
@@ -32,12 +41,18 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
-    strip = await cg.get_variable(config[CONF_STRIP_ID])
-    cg.add(var.set_strip(strip))
-
     user_light = await cg.get_variable(config[CONF_USER_LIGHT_ID])
     cg.add(var.set_user_light(user_light))
 
+    cg.add(var.set_pin(config[CONF_PIN]))
+    cg.add(var.set_num_leds(config[CONF_NUM_LEDS]))
+    order = config[CONF_RGB_ORDER]
+    cg.add(
+        var.set_rgb_order(
+            _CHANNEL_INDEX[order[0]], _CHANNEL_INDEX[order[1]], _CHANNEL_INDEX[order[2]]
+        )
+    )
+    cg.add(var.set_render_core(config[CONF_RENDER_CORE]))
     cg.add(var.set_frame_interval_ms(config[CONF_FRAME_INTERVAL].total_milliseconds))
 
     # The JSON scene parser (~6 KB ArduinoJson) is compiled in only when requested. When enabled,

@@ -5,7 +5,11 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
 
+#include "esp_heap_caps.h"
+#include "esp_err.h"
+
 #include <algorithm>
+#include <cstring>
 
 namespace esphome {
 namespace led_ring_controller {
@@ -20,21 +24,23 @@ static inline uint8_t to_byte(float v) {
 }
 
 void LedRingController::setup() {
-  if (this->strip_ == nullptr) {
-    ESP_LOGE(TAG, "strip not set");
+  if (this->user_light_ == nullptr) {
+    ESP_LOGE(TAG, "user_light not set");
     this->mark_failed();
     return;
   }
-  this->strip_out_ = static_cast<light::AddressableLight *>(this->strip_->get_output());
 
-  uint8_t num_leds = static_cast<uint8_t>(this->strip_out_->size());
-  this->work_ = FrameBuffer(num_leds);
-  this->prev_ = FrameBuffer(num_leds);
-  this->compositor_ = Compositor(num_leds);
+  this->work_ = FrameBuffer(this->num_leds_);
+  this->prev_ = FrameBuffer(this->num_leds_);
+  this->compositor_ = Compositor(this->num_leds_);
+
+  if (!this->init_rmt_()) {
+    this->mark_failed();
+    return;
+  }
 
   this->library_.build(this->facts_);
   this->facts_.init_in_progress = true;  // seed correct boot state
-  this->last_frame_ms_ = millis();
 
 #ifdef USE_LED_RING_JSON_LOADER
   // Validate the embedded default scene set parses (single source of truth check). Does not
@@ -51,24 +57,115 @@ void LedRingController::setup() {
     }
   }
 #endif
+
+  // Spin up the dedicated render+transmit task. Pinned to render_core_ so it ticks at a steady
+  // cadence regardless of how the main loop (core 0) jitters under WiFi/audio/API load. A 4 KB
+  // stack covers the compositor scratch + IDF RMT call path.
+  BaseType_t ok = xTaskCreatePinnedToCore(&LedRingController::render_task_trampoline_, "led_render",
+                                          4096, this, 2, &this->task_handle_, this->render_core_);
+  if (ok != pdPASS) {
+    ESP_LOGE(TAG, "failed to start render task");
+    this->mark_failed();
+  }
 }
 
-void LedRingController::loop() {
-  // 1. THROTTLE
-  uint32_t now_ms = millis();
-  uint32_t elapsed = now_ms - this->last_frame_ms_;
-  if (elapsed < this->frame_interval_ms_)
-    return;
-  // NOTE: `elapsed` is the gap between successive calls into this loop(), i.e. the cadence of
-  // ESPHome's cooperative main loop -- NOT how long our render takes (render is microseconds; the
-  // WS2812 transmit is deferred via schedule_show()). On a busy ESP32-S3 the main loop normally
-  // jitters to 30-35ms, so warning at 1.5x the interval just floods the log with noise we don't
-  // cause. Only flag genuine stutter (>=3x the target frame interval), and at VERBOSE.
-  if (elapsed > this->frame_interval_ms_ * 3)
-    ESP_LOGV(TAG, "frame interval %ums (target %ums)", elapsed, this->frame_interval_ms_);
-  float dt = elapsed / 1000.0f;
+bool LedRingController::init_rmt_() {
+  this->tx_buf_size_ = static_cast<size_t>(this->num_leds_) * 3;
+  this->tx_buf_ = static_cast<uint8_t *>(heap_caps_malloc(this->tx_buf_size_, MALLOC_CAP_INTERNAL));
+  if (this->tx_buf_ == nullptr) {
+    ESP_LOGE(TAG, "failed to allocate %u-byte tx buffer", static_cast<unsigned>(this->tx_buf_size_));
+    return false;
+  }
+  memset(this->tx_buf_, 0, this->tx_buf_size_);
 
-  // 2. BUILD RenderCtx
+  rmt_tx_channel_config_t tx_chan_config = {};
+  tx_chan_config.clk_src = RMT_CLK_SRC_DEFAULT;
+  tx_chan_config.gpio_num = static_cast<gpio_num_t>(this->pin_);
+  tx_chan_config.mem_block_symbols = 64;
+  tx_chan_config.resolution_hz = 10 * 1000 * 1000;  // 10 MHz -> 0.1 us per tick
+  tx_chan_config.trans_queue_depth = 4;
+  esp_err_t err = rmt_new_tx_channel(&tx_chan_config, &this->channel_);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "rmt_new_tx_channel failed: %s", esp_err_to_name(err));
+    return false;
+  }
+
+  // WS2812 bit timings at 0.1 us/tick: 0 = 0.4 us high / 0.8 us low, 1 = 0.8 us high / 0.4 us low.
+  // The >=50 us reset latch is covered by the inter-frame gap (>= frame_interval_ms_), so no
+  // trailing reset symbol is needed.
+  rmt_bytes_encoder_config_t bytes_cfg = {};
+  bytes_cfg.bit0.level0 = 1;
+  bytes_cfg.bit0.duration0 = 4;
+  bytes_cfg.bit0.level1 = 0;
+  bytes_cfg.bit0.duration1 = 8;
+  bytes_cfg.bit1.level0 = 1;
+  bytes_cfg.bit1.duration0 = 8;
+  bytes_cfg.bit1.level1 = 0;
+  bytes_cfg.bit1.duration1 = 4;
+  bytes_cfg.flags.msb_first = 1;
+  err = rmt_new_bytes_encoder(&bytes_cfg, &this->encoder_);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "rmt_new_bytes_encoder failed: %s", esp_err_to_name(err));
+    return false;
+  }
+
+  err = rmt_enable(this->channel_);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "rmt_enable failed: %s", esp_err_to_name(err));
+    return false;
+  }
+  return true;
+}
+
+void LedRingController::render_task_trampoline_(void *arg) {
+  static_cast<LedRingController *>(arg)->render_task_();
+}
+
+void LedRingController::render_task_() {
+  TickType_t last_wake = xTaskGetTickCount();
+  const TickType_t period = pdMS_TO_TICKS(this->frame_interval_ms_);
+  uint32_t last_frame_ms = millis();
+
+  for (;;) {
+    // Fixed-cadence tick. vTaskDelayUntil absorbs the time spent rendering above, so the wake-up
+    // cadence stays locked to frame_interval_ms_ -- the smooth-50fps guarantee.
+    vTaskDelayUntil(&last_wake, period);
+
+    uint32_t now_ms = millis();
+    float dt = (now_ms - last_frame_ms) / 1000.0f;
+    last_frame_ms = now_ms;
+
+#ifdef USE_LED_RING_JSON_LOADER
+    // Apply any scene set handed over by load_scenes() on the main loop. Done here so library_ /
+    // json_priority_ are only ever mutated by this task -- no lock on the render hot path.
+    bool do_install = false;
+    std::vector<Scene> scenes;
+    std::vector<PriorityRule> priority;
+    portENTER_CRITICAL(&this->install_mux_);
+    if (this->install_pending_) {
+      do_install = true;
+      scenes = std::move(this->pending_scenes_);
+      priority = std::move(this->pending_priority_);
+      this->install_pending_ = false;
+    }
+    portEXIT_CRITICAL(&this->install_mux_);
+    if (do_install) {
+      this->library_.install(std::move(scenes));
+      this->json_priority_ = std::move(priority);
+      this->active_scene_ = SceneId::IDLE;  // force fresh resolve + crossfade next frame
+      ESP_LOGI(TAG, "installed %u JSON priority rules",
+               static_cast<unsigned>(this->json_priority_.size()));
+    }
+#endif
+
+    this->render_one_frame_(now_ms, dt);
+    this->transmit_frame_(this->work_);
+  }
+}
+
+void LedRingController::render_one_frame_(uint32_t now_ms, float dt) {
+  // BUILD RenderCtx. current_values is owned by the main loop; the few floats read here are
+  // word-atomic and a single frame of skew is visually irrelevant.
   auto lv = this->user_light_->current_values;
   Pixel base_color{lv.get_red(), lv.get_green(), lv.get_blue()};
 
@@ -123,12 +220,8 @@ void LedRingController::loop() {
       scene.on_finished();  // clears the owning fact; resolve() picks another scene next frame
   }
 
-  // 7. COMMIT
+  // 7. COMMIT. prev_ feeds the next crossfade; the actual transmit happens back in render_task_().
   this->prev_ = this->work_;
-  this->write_frame_(this->work_);
-
-  // 8.
-  this->last_frame_ms_ = now_ms;
 }
 
 void LedRingController::set_flag(LedFlag flag, bool value) {
@@ -219,11 +312,13 @@ bool LedRingController::load_scenes(const std::string &json) {
   if (!factory.load(json, scenes, priority))
     return false;
 
-  this->library_.install(std::move(scenes));
-  this->json_priority_ = std::move(priority);
-  // Force a fresh scene resolution + crossfade on the next frame.
-  this->active_scene_ = SceneId::IDLE;
-  ESP_LOGI(TAG, "installed %u JSON priority rules", static_cast<unsigned>(this->json_priority_.size()));
+  // Parsing ran on the caller's thread (main loop). Hand the result to the render task, which
+  // performs the actual install at the top of its next frame -- keeps library_ single-writer.
+  portENTER_CRITICAL(&this->install_mux_);
+  this->pending_scenes_ = std::move(scenes);
+  this->pending_priority_ = std::move(priority);
+  this->install_pending_ = true;
+  portEXIT_CRITICAL(&this->install_mux_);
   return true;
 #else
   (void) json;
@@ -232,18 +327,32 @@ bool LedRingController::load_scenes(const std::string &json) {
 #endif
 }
 
-void LedRingController::write_frame_(const FrameBuffer &frame) {
-  auto &strip = *this->strip_out_;
-  uint8_t n = std::min<uint8_t>(frame.size(), static_cast<uint8_t>(strip.size()));
+void LedRingController::transmit_frame_(const FrameBuffer &frame) {
+  uint8_t n = std::min<uint8_t>(frame.size(), this->num_leds_);
   for (uint8_t i = 0; i < n; i++) {
-    strip[i].set_rgb(to_byte(frame[i].r), to_byte(frame[i].g), to_byte(frame[i].b));
+    uint8_t rgb[3] = {to_byte(frame[i].r), to_byte(frame[i].g), to_byte(frame[i].b)};
+    uint8_t *out = &this->tx_buf_[static_cast<size_t>(i) * 3];
+    out[0] = rgb[this->order_[0]];
+    out[1] = rgb[this->order_[1]];
+    out[2] = rgb[this->order_[2]];
   }
-  strip.schedule_show();
+
+  rmt_transmit_config_t tx_conf = {};
+  tx_conf.loop_count = 0;
+  esp_err_t err = rmt_transmit(this->channel_, this->encoder_, this->tx_buf_, this->tx_buf_size_, &tx_conf);
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "rmt_transmit failed: %s", esp_err_to_name(err));
+    return;
+  }
+  // Block this task (never the main loop) until the frame is on the wire. A 24-LED WS2812 frame is
+  // ~720 us; the 100 ms ceiling only guards against a wedged channel.
+  rmt_tx_wait_all_done(this->channel_, 100);
 }
 
 void LedRingController::dump_config() {
   ESP_LOGCONFIG(TAG, "LedRingController:");
-  ESP_LOGCONFIG(TAG, "  Strip LEDs: %d", this->strip_out_ != nullptr ? this->strip_out_->size() : 0);
+  ESP_LOGCONFIG(TAG, "  LEDs: %u (pin GPIO%u)", this->num_leds_, this->pin_);
+  ESP_LOGCONFIG(TAG, "  Render core: %u", this->render_core_);
   ESP_LOGCONFIG(TAG, "  Frame interval: %u ms", this->frame_interval_ms_);
 }
 
