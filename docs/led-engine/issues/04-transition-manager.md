@@ -37,6 +37,11 @@ class TransitionManager {
 **`EasingFn`** is `float (*)(float t)` defined in `easing.h` (issue 02). Function pointer
 keeps this allocation-free; all three easings are stateless free functions.
 
+`begin()` takes no timestamp; it records `start_ms_` via `esphome::millis()` (the one engine
+file that touches `esphome/core/hal.h`). `apply()` uses the `now_ms` the controller passes, so
+the two stay on the same clock. `active_` is `mutable` because `apply()` is `const` yet flips
+it false once `t >= 1.0`.
+
 ### Behaviour details
 
 | Condition | Result |
