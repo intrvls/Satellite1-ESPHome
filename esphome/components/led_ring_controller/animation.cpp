@@ -53,17 +53,31 @@ void RotatingBlob::render(FrameBuffer &buffer, const RenderCtx &ctx) {
 
   Pixel base = scale(ctx.base_color, ctx.base_brightness);
 
+  // Add `color` at a fractional ring position, splitting its intensity across the two adjacent
+  // LEDs by the fractional distance. This is sub-pixel anti-aliasing: the blob's centre of mass
+  // glides continuously even though only 24 physical LEDs exist, so motion reads as smooth rather
+  // than snapping one LED at a time. Writes are additive so overlapping splits / both blobs sum.
+  auto add_aa = [&](float position, Pixel color) {
+    int i0 = static_cast<int>(std::floor(position));
+    float frac = position - static_cast<float>(i0);  // 0.0 .. 1.0
+    uint8_t a = static_cast<uint8_t>(((i0 % n) + n) % n);
+    uint8_t b = static_cast<uint8_t>((((i0 + 1) % n) + n) % n);
+    Pixel near = scale(color, 1.0f - frac);
+    Pixel far = scale(color, frac);
+    buffer[a] = {buffer[a].r + near.r, buffer[a].g + near.g, buffer[a].b + near.b};
+    buffer[b] = {buffer[b].r + far.r, buffer[b].g + far.g, buffer[b].b + far.b};
+  };
+
   auto add_blob = [&](float center) {
-    int lead = static_cast<int>(std::floor(center)) % n;
-    if (lead < 0)
-      lead += n;
-    buffer[static_cast<uint8_t>(lead)] = base;
+    add_aa(center, base);  // head at full intensity
     for (uint8_t k = 1; k <= this->params_.trail_len; k++) {
       float factor = 1.0f - 0.25f * static_cast<float>(k);  // 0.75, 0.50, ...
       if (factor < 0.0f)
         factor = 0.0f;
-      int idx = (lead + n - k) % n;
-      buffer[static_cast<uint8_t>(idx)] = scale(base, factor);
+      // Gamma-shape the fade (~2.2) so the trail tapers smoothly in perceived brightness rather
+      // than in raw PWM, where the linear steps look lumpy on WS2812s.
+      factor = std::pow(factor, 2.2f);
+      add_aa(center - static_cast<float>(k), scale(base, factor));
     }
   };
 
@@ -83,7 +97,7 @@ void RotatingBlob::render(FrameBuffer &buffer, const RenderCtx &ctx) {
     }
   }
 
-  this->pos_ += this->params_.speed;
+  this->pos_ += this->params_.speed * ctx.dt;
   while (this->pos_ >= static_cast<float>(n))
     this->pos_ -= static_cast<float>(n);
   while (this->pos_ < 0.0f)

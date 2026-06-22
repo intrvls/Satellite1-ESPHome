@@ -5,11 +5,11 @@
       "layers": [ { "primitive": "solid", "params": { "color": "user" } } ] },
 
     "waiting":         { "transition_in_ms": 300, "brightness_mode": "user",
-      "layers": [ { "primitive": "rotating_blob", "params": { "speed": 0.5, "trail_len": 2 } } ] },
+      "layers": [ { "primitive": "rotating_blob", "params": { "speed": 31.25, "trail_len": 2 } } ] },
     "listening":       { "transition_in_ms": 200, "brightness_mode": "user",
-      "layers": [ { "primitive": "rotating_blob", "params": { "speed": 1.0, "trail_len": 2 } } ] },
+      "layers": [ { "primitive": "rotating_blob", "params": { "speed": 62.5, "trail_len": 2 } } ] },
     "replying":        { "transition_in_ms": 200, "brightness_mode": "user",
-      "layers": [ { "primitive": "rotating_blob", "params": { "speed": -1.0, "trail_len": 2 } } ] },
+      "layers": [ { "primitive": "rotating_blob", "params": { "speed": -62.5, "trail_len": 2 } } ] },
     "thinking":        { "transition_in_ms": 200, "brightness_mode": "user",
       "layers": [ { "primitive": "pulse", "params": {
         "color": "user", "min_b": 0.0, "max_b": 1.0, "period_ms": 200, "max_cycles": 0, "positions": [2, 14] } } ] },

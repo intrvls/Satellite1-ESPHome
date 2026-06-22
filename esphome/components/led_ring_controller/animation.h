@@ -67,11 +67,13 @@ class SolidFill : public Animation {
 };
 
 // Two diametrically opposite blobs rotating around the ring (port of the "Rotating Blob"
-// lambda). Each blob is a lead pixel plus `trail_len` trailing pixels at 0.75, 0.50, ...
-// brightness. Mic-position LEDs ({0,6,12,18}) are dimmed so the max channel never exceeds
-// ~0.5, reducing light bleed into the microphones.
+// lambda). Each blob is a head plus `trail_len` trailing pixels at 0.75, 0.50, ... brightness
+// (gamma-shaped). Head and trail are rendered with sub-pixel anti-aliasing: each point's
+// intensity is split across the two LEDs it falls between, so the blob glides smoothly across
+// the 24 physical LEDs instead of snapping one index at a time. Mic-position LEDs ({0,6,12,18})
+// are dimmed so the max channel never exceeds ~0.5, reducing light bleed into the microphones.
 struct RotatingBlobParams {
-  float speed;        // LEDs per frame (positive = CW, negative = CCW)
+  float speed;        // LEDs per second (positive = CW, negative = CCW)
   uint8_t trail_len;  // number of trailing pixels (2 in all current scenes)
 };
 

@@ -52,19 +52,19 @@ void SceneLibrary::build(Facts &facts) {
     Scene &s = slot(SceneId::WAITING);  // slow CW spin
     s.transition_in_ms = 300;
     s.brightness_mode = BrightnessMode::USER;
-    add_layer(s, std::make_unique<RotatingBlob>(RotatingBlobParams{0.5f, 2}));
+    add_layer(s, std::make_unique<RotatingBlob>(RotatingBlobParams{31.25f, 2}));
   }
   {
     Scene &s = slot(SceneId::LISTENING);  // fast CW spin
     s.transition_in_ms = 200;
     s.brightness_mode = BrightnessMode::USER;
-    add_layer(s, std::make_unique<RotatingBlob>(RotatingBlobParams{1.0f, 2}));
+    add_layer(s, std::make_unique<RotatingBlob>(RotatingBlobParams{62.5f, 2}));
   }
   {
     Scene &s = slot(SceneId::REPLYING);  // fast CCW spin
     s.transition_in_ms = 200;
     s.brightness_mode = BrightnessMode::USER;
-    add_layer(s, std::make_unique<RotatingBlob>(RotatingBlobParams{-1.0f, 2}));
+    add_layer(s, std::make_unique<RotatingBlob>(RotatingBlobParams{-62.5f, 2}));
   }
   {
     Scene &s = slot(SceneId::THINKING);  // blink at positions 2 + 14
