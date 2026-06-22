@@ -4,7 +4,7 @@ led_ring_controller:
   pin: GPIO21
   num_leds: 24
   rgb_order: GRB
-  frame_interval: 20ms
+  frame_interval: 10ms
 
 # No-op outputs backing the state-only user light. The controller does NOT drive the hardware
 # through these — it reads the light's current_values (on/off, color, brightness) each frame and
