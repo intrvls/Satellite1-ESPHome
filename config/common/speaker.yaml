@@ -31,6 +31,11 @@ speaker:
     # Shared output ring buffer. Default is 500ms; kept small so a button/wake
     # stop drains quickly instead of playing ~half a second of buffered audio.
     buffer_duration: 200ms
+    # Live output amplitude (0..1 RMS, ~33Hz) feeding the LED loudness visualizer (issue 13).
+    # Drives the ring directly from the PCM actually played, so the reply glow stays in sync with
+    # the audio buffer rather than the decode/stream end (issue 14).
+    on_audio_level:
+      - led_ring_controller.set_audio_level: !lambda "return x;"
 
   # Virtual speakers to combine the announcement and media streams together into one output
   - platform: mixer

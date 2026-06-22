@@ -107,6 +107,11 @@ external_components:
       - pcm5122
       - satellite1
       - satellite1_radar
+      # Vendored from ESPHome 2026.4.5 to carry a local patch holding the media player in the
+      # ANNOUNCING state until the TTS/announcement PCM drains from the speaker chain, so device
+      # state (LED phase, ducking, HA announce-finished, continue_conversation) syncs to playout
+      # rather than decode-end (issue 14). Re-sync from upstream on any esphome bump.
+      - speaker_source
       - tas2780
 
   - source:

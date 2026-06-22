@@ -11,10 +11,13 @@
 #include "esphome/components/audio/audio.h"
 #include "esphome/components/speaker/speaker.h"
 
+#include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 #include "esphome/core/gpio.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/ring_buffer.h"
+
+#include <atomic>
 
 namespace esphome {
 namespace i2s_audio {
@@ -58,6 +61,15 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
   /// Q15 fixed-point factor.
   /// @param mute_state true for muting, false for unmuting
   void set_mute_state(bool mute_state) override;
+
+  /// @brief Registers a callback invoked once per metering window (~30ms) with the normalized
+  /// output amplitude (0..1 RMS) of the audio actually being played, post software-volume.
+  /// Registering any callback enables the per-sample metering pass in the speaker task; it is
+  /// otherwise skipped entirely (no CPU cost). See issue 13 (TTS loudness visualizer).
+  void add_audio_level_callback(std::function<void(float)> &&callback) {
+    this->audio_level_callback_.add(std::move(callback));
+    this->output_metering_enabled_ = true;
+  }
 
  protected:
   /// @brief Function for the FreeRTOS task handling audio output.
@@ -136,6 +148,22 @@ class I2SAudioSpeaker : public I2SAudioOut, public speaker::Speaker, public Comp
 
   // Stream info tracking for dynamic reconfiguration
   audio::AudioStreamInfo current_stream_info_;
+
+  // Output amplitude metering (issue 13). The speaker task computes a per-window RMS over the
+  // post-volume PCM and stashes it in pending_audio_level_ + sets audio_level_dirty_; loop()
+  // drains it on the main loop and fires audio_level_callback_, so automations run main-loop-safe.
+  CallbackManager<void(float)> audio_level_callback_{};
+  bool output_metering_enabled_{false};  // true once a level callback is registered
+  std::atomic<bool> audio_level_dirty_{false};
+  float pending_audio_level_{0.0f};  // task -> loop() handoff (single 32-bit value, aligned)
+};
+
+// Fires once per metering window with the 0..1 output amplitude. Configured via `on_audio_level`.
+class AudioLevelTrigger : public Trigger<float> {
+ public:
+  explicit AudioLevelTrigger(I2SAudioSpeaker *speaker) {
+    speaker->add_audio_level_callback([this](float level) { this->trigger(level); });
+  }
 };
 
 }  // namespace i2s_audio

@@ -53,6 +53,11 @@ struct Facts {
   bool master_mute{false};
   bool media_muted{false};  // true when media_volume == 0 OR player is_muted()
   float media_volume{0.f};  // 0..1
+
+  // Live output loudness (issue 13). Separate from media_volume so the volume gauge / mute
+  // markers are never affected. 0..1, enveloped (fast attack / slow decay) by the controller.
+  float audio_level{0.f};
+  bool audio_visualizer_enabled{false};  // set once from config; gates the LOUDNESS scene
 };
 
 class StateMachine {

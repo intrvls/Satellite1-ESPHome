@@ -10,6 +10,9 @@
 
 #include "esp_timer.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace esphome {
 namespace i2s_audio {
 
@@ -107,6 +110,12 @@ void I2SAudioSpeaker::loop() {
     }
   }
 #endif
+
+  // Surface the latest output amplitude window on the main loop (issue 13). The speaker task
+  // only sets the dirty flag, so the trigger/automation runs main-loop-safe.
+  if (this->audio_level_dirty_.exchange(false, std::memory_order_acquire)) {
+    this->audio_level_callback_.call(this->pending_audio_level_);
+  }
 
   uint32_t event_group_bits = xEventGroupGetBits(this->event_group_);
 
@@ -305,6 +314,14 @@ void I2SAudioSpeaker::speaker_task(void *params) {
 
     this_speaker->last_dma_write_ = 0;
 
+    // Output amplitude metering (issue 13): accumulate sum-of-squares over a ~30ms window of the
+    // post-volume PCM, then publish a normalized RMS (0..1). Only runs when a level callback is
+    // registered. Uses a double accumulator since per-sample squares of normalized samples are < 1.
+    double metering_sum_sq = 0.0;
+    uint32_t metering_samples = 0;
+    const uint32_t metering_window_samples =
+        std::max<uint32_t>(1, audio_stream_info.get_sample_rate() * audio_stream_info.get_channels() / 33);
+
     // Keep looping if paused, there is no timeout configured, or data was received more recently than the configured
     // timeout
     while (this_speaker->pause_state_ || !this_speaker->timeout_.has_value() ||
@@ -378,6 +395,27 @@ void I2SAudioSpeaker::speaker_task(void *params) {
           sample >>= shift;
           sample *= gain_factor;  // Q31
           audio::pack_q31_as_audio_sample(sample, &this_speaker->data_buffer_[i * bytes_per_sample], bytes_per_sample);
+        }
+      }
+
+      // Output amplitude metering over the post-volume PCM (issue 13). Tracks what's audible.
+      if (this_speaker->output_metering_enabled_ && bytes_read > 0) {
+        const size_t bytes_per_sample = audio_stream_info.samples_to_bytes(1);
+        const uint32_t n = bytes_read / bytes_per_sample;  // sample count across all channels
+        for (uint32_t i = 0; i < n; ++i) {
+          int32_t s =
+              audio::unpack_audio_sample_to_q31(&this_speaker->data_buffer_[i * bytes_per_sample], bytes_per_sample);
+          const double sn = static_cast<double>(s) / 2147483648.0;  // normalize Q31 -> [-1, 1)
+          metering_sum_sq += sn * sn;
+        }
+        metering_samples += n;
+
+        if (metering_samples >= metering_window_samples) {
+          const float rms = static_cast<float>(std::sqrt(metering_sum_sq / metering_samples));
+          this_speaker->pending_audio_level_ = std::min(1.0f, rms);
+          this_speaker->audio_level_dirty_.store(true, std::memory_order_release);
+          metering_sum_sq = 0.0;
+          metering_samples = 0;
         }
       }
 

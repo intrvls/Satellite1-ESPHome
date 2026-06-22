@@ -9,12 +9,18 @@
 #include "esp_err.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace esphome {
 namespace led_ring_controller {
 
 static const char *const TAG = "led_ring_controller";
+
+// Loudness envelope (issue 13): treat input older than this as silence so the glow decays once
+// playback stops, and fall off with this exponential time constant (slow decay / instant attack).
+static constexpr uint32_t AUDIO_LEVEL_STALE_MS = 120;
+static constexpr float AUDIO_LEVEL_DECAY_TAU = 0.12f;
 
 static inline float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
@@ -164,6 +170,9 @@ void LedRingController::render_task_() {
 }
 
 void LedRingController::render_one_frame_(uint32_t now_ms, float dt) {
+  // Envelope the live loudness before resolving, so the LOUDNESS gate sees the current value.
+  this->update_audio_level_(now_ms, dt);
+
   // BUILD RenderCtx. current_values is owned by the main loop; the few floats read here are
   // word-atomic and a single frame of skew is visually irrelevant.
   auto lv = this->user_light_->current_values;
@@ -190,7 +199,8 @@ void LedRingController::render_one_frame_(uint32_t now_ms, float dt) {
   RenderCtx ctx{now_ms,           dt,
                 base_color,       base_brightness,
                 lv.is_on(),       this->facts_.media_volume,
-                this->facts_.timer_ratio, this->facts_.xmos_flash_progress};
+                this->facts_.timer_ratio, this->facts_.xmos_flash_progress,
+                this->facts_.audio_level};
 
   // 3. SCENE CHANGE DETECTION
   if (next_id != this->active_scene_) {
@@ -222,6 +232,31 @@ void LedRingController::render_one_frame_(uint32_t now_ms, float dt) {
 
   // 7. COMMIT. prev_ feeds the next crossfade; the actual transmit happens back in render_task_().
   this->prev_ = this->work_;
+}
+
+void LedRingController::set_audio_level(float level) {
+  this->incoming_audio_level_ = level;
+  this->incoming_level_ms_ = millis();
+}
+
+void LedRingController::update_audio_level_(uint32_t now_ms, float dt) {
+  if (!this->facts_.audio_visualizer_enabled)
+    return;
+
+  // incoming_audio_level_ is written by set_audio_level() on the main loop; this runs on the
+  // render task and is the sole writer of facts_.audio_level. The cross-thread float read is
+  // word-atomic (same tolerance as the other facts read here).
+  float target = this->incoming_audio_level_;
+  if (now_ms - this->incoming_level_ms_ > AUDIO_LEVEL_STALE_MS)
+    target = 0.0f;  // metering stopped -> decay to silence
+
+  float level = this->facts_.audio_level;
+  if (target >= level) {
+    level = target;  // fast attack: jump to the new peak
+  } else {
+    level += (target - level) * (1.0f - std::exp(-dt / AUDIO_LEVEL_DECAY_TAU));  // slow decay
+  }
+  this->facts_.audio_level = level;
 }
 
 void LedRingController::set_flag(LedFlag flag, bool value) {

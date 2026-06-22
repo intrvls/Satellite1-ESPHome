@@ -1,4 +1,4 @@
-from esphome import pins
+from esphome import automation, pins
 import esphome.codegen as cg
 from esphome.components import audio, esp32, speaker
 import esphome.config_validation as cv
@@ -11,7 +11,8 @@ from esphome.const import (
     CONF_NEVER,
     CONF_NUM_CHANNELS,
     CONF_SAMPLE_RATE,
-    CONF_TIMEOUT
+    CONF_TIMEOUT,
+    CONF_TRIGGER_ID,
 )
 
 from .. import (
@@ -36,10 +37,14 @@ DEPENDENCIES = ["i2s_audio"]
 I2SAudioSpeaker = i2s_audio_ns.class_(
     "I2SAudioSpeaker", cg.Component, speaker.Speaker, I2SAudioOut
 )
+AudioLevelTrigger = i2s_audio_ns.class_(
+    "AudioLevelTrigger", automation.Trigger.template(cg.float_)
+)
 
 CONF_MUTE_PIN = "mute_pin"
 CONF_DAC_TYPE = "dac_type"
 CONF_I2S_COMM_FMT = "i2s_comm_fmt"
+CONF_ON_AUDIO_LEVEL = "on_audio_level"
 
 i2s_dac_mode_t = cg.global_ns.enum("i2s_dac_mode_t")
 INTERNAL_DAC_OPTIONS = {
@@ -125,6 +130,11 @@ BASE_SCHEMA = (
                 cv.positive_time_period_milliseconds,
                 cv.one_of(CONF_NEVER, lower=True),
             ),
+            cv.Optional(CONF_ON_AUDIO_LEVEL): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(AudioLevelTrigger),
+                }
+            ),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -187,3 +197,7 @@ async def to_code(config):
     if config[CONF_TIMEOUT] != CONF_NEVER:
         cg.add(var.set_timeout(config[CONF_TIMEOUT]))
     cg.add(var.set_buffer_duration(config[CONF_BUFFER_DURATION]))
+
+    for conf in config.get(CONF_ON_AUDIO_LEVEL, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(cg.float_, "x")], conf)

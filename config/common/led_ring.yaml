@@ -5,6 +5,9 @@ led_ring_controller:
   num_leds: 24
   rgb_order: GRB
   frame_interval: 20ms
+  # Amplitude-reactive ring glow during TTS replies / announcements / media (issue 13). Fed by
+  # the i2s_audio_speaker on_audio_level trigger in speaker.yaml.
+  enable_audio_visualizer: true
 
 # No-op outputs backing the state-only user light. The controller does NOT drive the hardware
 # through these — it reads the light's current_values (on/off, color, brightness) each frame and

@@ -44,6 +44,7 @@ enum class SceneId : uint8_t {
   NOT_READY,        // va_phase == VA_NOT_READY; red twinkle
 
   // Background
+  LOUDNESS,         // audio_visualizer_enabled && audio_level > eps; ring glow tracking loudness
   TIMER_TICK,       // is_timer_active; arc showing time remaining
   MUTED,            // master_mute || media_muted; solid + marker overlays
   IDLE,             // default; reflect led_ring on/off + user color

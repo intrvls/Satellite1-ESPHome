@@ -34,6 +34,13 @@ template<typename... Ts> class SetMediaVolumeAction : public Action<Ts...>, publ
   void play(const Ts &...x) override { this->parent_->set_media_volume(this->volume_.value(x...)); }
 };
 
+// led_ring_controller.set_audio_level
+template<typename... Ts> class SetAudioLevelAction : public Action<Ts...>, public Parented<LedRingController> {
+ public:
+  TEMPLATABLE_VALUE(float, level)
+  void play(const Ts &...x) override { this->parent_->set_audio_level(this->level_.value(x...)); }
+};
+
 // led_ring_controller.set_timer_ratio
 template<typename... Ts> class SetTimerRatioAction : public Action<Ts...>, public Parented<LedRingController> {
  public:

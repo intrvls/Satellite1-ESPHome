@@ -18,6 +18,7 @@ struct RenderCtx {
   float media_volume;           // 0..1
   float timer_ratio;            // 0..1 (seconds_left / total_seconds)
   float xmos_flash_progress;    // 0..1 (updated by event(xmos_flash_progress) actions)
+  float audio_level;            // 0..1 live output loudness, enveloped (issue 13)
 };
 
 class Animation {
@@ -64,6 +65,26 @@ class SolidFill : public Animation {
   uint32_t duration_ms_{0};
   uint32_t start_ms_{0};
   bool finished_{false};
+};
+
+// Amplitude-reactive full-ring glow (issue 13). Fills the ring with `color` (or ctx.base_color)
+// scaled by a perceptually-shaped ctx.audio_level, so the ring brightens with speech/audio
+// loudness. The 0..1 level is already enveloped (fast attack / slow decay) by the controller;
+// this primitive only maps level -> brightness. Used by the LOUDNESS scene.
+struct LoudnessGlowParams {
+  Pixel color;        // glow colour
+  bool use_base_color;  // true -> ignore `color`, use ctx.base_color (the user's ring colour)
+  float gamma;        // perceptual shaping exponent applied to level (e.g. 0.5 lifts quiet speech)
+};
+
+class LoudnessGlow : public Animation {
+ public:
+  explicit LoudnessGlow(LoudnessGlowParams params) : params_(params) {}
+
+  void render(FrameBuffer &buffer, const RenderCtx &ctx) override;
+
+ protected:
+  LoudnessGlowParams params_;
 };
 
 // Two diametrically opposite blobs rotating around the ring (port of the "Rotating Blob"

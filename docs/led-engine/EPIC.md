@@ -90,6 +90,8 @@ Dependency order top-to-bottom. Each issue links its own file.
 | 10 | [Full priority table + one-shot auto-revert](issues/10-priority-table-oneshots.md) | 09 |
 | 11 | [YAML migration: rewire triggers, gut led_ring.yaml](issues/11-yaml-migration.md) | 10 |
 | 12 | [Markup format: JSON scene descriptors + runtime loader](issues/12-markup-format.md) | 10 |
+| 13 | [TTS loudness visualizer: amplitude-reactive ring](issues/13-tts-loudness-visualizer.md) | 11 |
+| 14 | [Holistic TTS playout sync: state follows the PCM buffer](issues/14-tts-playout-holistic-sync.md) | 11, 13 |
 
 Issues 01–06 are foundation (no behavior change to shipped firmware until 06 is wired behind a
 build flag or variant). 11 is the cutover. 12 is the future-enabling capability and can land

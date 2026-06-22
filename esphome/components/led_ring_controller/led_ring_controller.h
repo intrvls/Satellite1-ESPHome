@@ -80,6 +80,10 @@ class LedRingController : public Component {
     this->facts_.media_muted = (volume == 0.0f);
   }
   void set_timer_ratio(float ratio) { this->facts_.timer_ratio = ratio; }
+  // Live output loudness (issue 13). Stashes the raw 0..1 level; the render task envelopes it
+  // (fast attack / slow decay) into facts_.audio_level. No media_muted side effect.
+  void set_audio_level(float level);
+  void set_audio_visualizer_enabled(bool enabled) { this->facts_.audio_visualizer_enabled = enabled; }
   void handle_event(LedEvent event, float value);
 
 #ifdef USE_LED_RING_JSON_LOADER
@@ -101,6 +105,8 @@ class LedRingController : public Component {
   void render_task_();
   // Renders exactly one frame into work_ (scene resolve -> composite -> transition -> one-shot).
   void render_one_frame_(uint32_t now_ms, float dt);
+  // Advances the loudness envelope toward the latest input (or silence if input went stale).
+  void update_audio_level_(uint32_t now_ms, float dt);
 
   // Encodes work_ to GRB-ordered bytes and pushes them out the RMT channel, blocking this task
   // (not the main loop) until the transmit completes.
@@ -127,6 +133,11 @@ class LedRingController : public Component {
 
   Facts facts_;
   StateMachine sm_;
+
+  // Loudness input handoff: set_audio_level() (main loop) writes these; update_audio_level_()
+  // (render task) reads them. Word-atomic, single-frame skew tolerated like the other facts.
+  float incoming_audio_level_{0.0f};
+  uint32_t incoming_level_ms_{0};
   SceneLibrary library_;
   Compositor compositor_;
   TransitionManager transition_;

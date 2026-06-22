@@ -15,6 +15,7 @@ LedRingController = led_ring_controller_ns.class_("LedRingController", cg.Compon
 CONF_USER_LIGHT_ID = "user_light_id"
 CONF_FRAME_INTERVAL = "frame_interval"
 CONF_ENABLE_JSON_LOADER = "enable_json_loader"
+CONF_ENABLE_AUDIO_VISUALIZER = "enable_audio_visualizer"
 CONF_RENDER_CORE = "render_core"
 
 # Source-channel index for each WS2812 output byte position. WS2812 is GRB on the wire.
@@ -33,6 +34,9 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_RENDER_CORE, default=1): cv.one_of(0, 1, int=True),
         cv.Optional(CONF_FRAME_INTERVAL, default="20ms"): cv.positive_time_period_milliseconds,
         cv.Optional(CONF_ENABLE_JSON_LOADER, default=False): cv.boolean,
+        # Enables the amplitude-reactive LOUDNESS scene (issue 13). Off by default; when off the
+        # scene is never resolved and the loudness envelope stays at 0 (no visible effect).
+        cv.Optional(CONF_ENABLE_AUDIO_VISUALIZER, default=False): cv.boolean,
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -54,6 +58,7 @@ async def to_code(config):
     )
     cg.add(var.set_render_core(config[CONF_RENDER_CORE]))
     cg.add(var.set_frame_interval_ms(config[CONF_FRAME_INTERVAL].total_milliseconds))
+    cg.add(var.set_audio_visualizer_enabled(config[CONF_ENABLE_AUDIO_VISUALIZER]))
 
     # The JSON scene parser (~6 KB ArduinoJson) is compiled in only when requested. When enabled,
     # the checked-in default scene set is embedded and validated at boot as the single source of
@@ -73,6 +78,7 @@ CONF_FLAG = "flag"
 CONF_VOLUME = "volume"
 CONF_RATIO = "ratio"
 CONF_EVENT = "event"
+CONF_LEVEL = "level"
 
 LedFlag = led_ring_controller_ns.enum("LedFlag", is_class=True)
 LED_FLAGS = {
@@ -104,6 +110,7 @@ LED_EVENTS = {
 SetPhaseAction = led_ring_controller_ns.class_("SetPhaseAction", automation.Action)
 SetFlagAction = led_ring_controller_ns.class_("SetFlagAction", automation.Action)
 SetMediaVolumeAction = led_ring_controller_ns.class_("SetMediaVolumeAction", automation.Action)
+SetAudioLevelAction = led_ring_controller_ns.class_("SetAudioLevelAction", automation.Action)
 SetTimerRatioAction = led_ring_controller_ns.class_("SetTimerRatioAction", automation.Action)
 EventAction = led_ring_controller_ns.class_("EventAction", automation.Action)
 LoadScenesAction = led_ring_controller_ns.class_("LoadScenesAction", automation.Action)
@@ -140,6 +147,14 @@ SET_TIMER_RATIO_SCHEMA = cv.maybe_simple_value(
         cv.Required(CONF_RATIO): cv.templatable(cv.percentage),
     },
     key=CONF_RATIO,
+)
+
+SET_AUDIO_LEVEL_SCHEMA = cv.maybe_simple_value(
+    {
+        cv.GenerateID(): cv.use_id(LedRingController),
+        cv.Required(CONF_LEVEL): cv.templatable(cv.percentage),
+    },
+    key=CONF_LEVEL,
 )
 
 EVENT_SCHEMA = cv.maybe_simple_value(
@@ -179,6 +194,17 @@ async def set_media_volume_to_code(config, action_id, template_arg, args):
     await cg.register_parented(var, config[CONF_ID])
     template_ = await cg.templatable(config[CONF_VOLUME], args, cg.float_)
     cg.add(var.set_volume(template_))
+    return var
+
+
+@automation.register_action(
+    "led_ring_controller.set_audio_level", SetAudioLevelAction, SET_AUDIO_LEVEL_SCHEMA, synchronous=True
+)
+async def set_audio_level_to_code(config, action_id, template_arg, args):
+    var = cg.new_Pvariable(action_id, template_arg)
+    await cg.register_parented(var, config[CONF_ID])
+    template_ = await cg.templatable(config[CONF_LEVEL], args, cg.float_)
+    cg.add(var.set_level(template_))
     return var
 
 

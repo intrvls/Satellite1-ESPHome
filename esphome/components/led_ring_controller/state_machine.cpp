@@ -37,6 +37,11 @@ SceneId StateMachine::resolve(const Facts &f) const {
     return SceneId::LISTENING;
   if (f.va_phase == VA_THINKING)
     return SceneId::THINKING;
+  // Loudness glow sits just above REPLYING: a TTS reply is visualized by actual output amplitude
+  // and stays lit until the PCM drains, regardless of when the `replying` phase clears (issue 14).
+  // Checked after THINKING so the thinking-chime doesn't override the thinking blink.
+  if (f.audio_visualizer_enabled && f.audio_level > 0.02f)
+    return SceneId::LOUDNESS;
   if (f.va_phase == VA_REPLYING)
     return SceneId::REPLYING;
   if (f.va_phase == VA_ERROR)

@@ -45,6 +45,14 @@ void SolidFill::render(FrameBuffer &buffer, const RenderCtx &ctx) {
   buffer.fill(c);
 }
 
+void LoudnessGlow::render(FrameBuffer &buffer, const RenderCtx &ctx) {
+  float level = std::clamp(ctx.audio_level, 0.0f, 1.0f);
+  // Perceptual shaping: powf(level, gamma) with gamma < 1 lifts quiet speech so it's visible.
+  float shaped = (this->params_.gamma == 1.0f) ? level : std::pow(level, this->params_.gamma);
+  Pixel c = this->params_.use_base_color ? ctx.base_color : this->params_.color;
+  buffer.fill(scale(c, ctx.base_brightness * shaped));
+}
+
 void RotatingBlob::start(const RenderCtx & /*ctx*/) { this->pos_ = 0.0f; }
 
 void RotatingBlob::render(FrameBuffer &buffer, const RenderCtx &ctx) {

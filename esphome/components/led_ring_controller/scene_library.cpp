@@ -191,6 +191,17 @@ void SceneLibrary::build(Facts &facts) {
                 [&facts] { return facts.media_muted; });
   }
 
+  // --- LOUDNESS: amplitude-reactive ring glow while audio is actually playing (issue 13). ---
+  // Gated on audio_level in the priority table; sits just above REPLYING so a TTS reply reads as
+  // a loudness glow and, crucially, persists until the PCM buffer truly drains — independent of
+  // when the VA `replying` phase clears (the holistic LED<->audio sync, issue 14).
+  {
+    Scene &s = slot(SceneId::LOUDNESS);
+    s.transition_in_ms = 150;
+    s.brightness_mode = BrightnessMode::USER;
+    add_layer(s, std::make_unique<LoudnessGlow>(LoudnessGlowParams{{}, true, 0.5f}));
+  }
+
   // --- XMOS flashing pipeline. ---
   {
     Scene &s = slot(SceneId::XMOS_FLASH);  // blue sweep wiping as progress advances
